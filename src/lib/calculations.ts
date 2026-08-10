@@ -1,6 +1,6 @@
 export const MAX_PRICE = 999999.99;
-export const MAX_SURCHARGE_PERCENTAGE = 100;
-export const MAX_SERVICE_FEE_RATE = 1;
+export const MAX_SURCHARGE_PERCENTAGE = 999999.99;
+export const MAX_SERVICE_FEE_RATE = 999999.99;
 
 export function roundHalfUp(value: number, decimals = 2): number {
   const stringValue = Math.abs(value).toFixed(decimals + 6);

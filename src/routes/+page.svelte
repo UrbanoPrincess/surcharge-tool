@@ -31,29 +31,64 @@
   let totalsMatch = false;
 
   const sanitizeAmountInput = (value: string) => {
-    let sanitized = value.replace(/[^0-9.\-]/g, '');
+    const cleaned = value.replace(/[^0-9.]/g, '');
 
-    if (sanitized.startsWith('-')) {
-      sanitized = `-${sanitized.slice(1).replace(/-/g, '')}`;
-    } else {
-      sanitized = sanitized.replace(/-/g, '');
+    const [integer = '', decimal = ''] = cleaned.split('.');
+    const limitedInteger = integer.slice(0, 6);
+    const limitedDecimal = decimal.slice(0, 2);
+
+    return limitedDecimal ? `${limitedInteger}.${limitedDecimal}` : limitedInteger;
+  };
+
+  const allowInputKey = (event: KeyboardEvent) => {
+    const key = event.key;
+    if (key === 'Tab' || key === 'Backspace' || key === 'Delete' || key === 'ArrowLeft' || key === 'ArrowRight' || key === 'Home' || key === 'End') {
+      return;
     }
 
-    const parts = sanitized.split('.');
-    if (parts.length > 2) {
-      sanitized = `${parts[0]}.${parts.slice(1).join('')}`;
+    if (event.ctrlKey || event.metaKey) {
+      return;
     }
 
-    if (sanitized.includes('.')) {
-      const [integer, decimal = ''] = sanitized.split('.');
-      sanitized = `${integer}.${decimal.slice(0, 2)}`;
+    if (key === '.') {
+      const input = event.target as HTMLInputElement;
+      if (input.value.includes('.')) {
+        event.preventDefault();
+      }
+      return;
     }
 
-    if (sanitized.length > 12) {
-      sanitized = sanitized.slice(0, 12);
+    if (/^[0-9]$/.test(key)) {
+      const input = event.target as HTMLInputElement;
+      const value = input.value;
+      const selectionStart = input.selectionStart ?? value.length;
+      const selectionEnd = input.selectionEnd ?? value.length;
+      const [integerPart = ''] = value.split('.');
+      const selectedIntegerChars = value.slice(selectionStart, selectionEnd).replace(/\D/g, '').length;
+      const integerLengthAfterEdit = integerPart.length - selectedIntegerChars + 1;
+      const cursorInInteger = selectionStart <= integerPart.length;
+
+      if (cursorInInteger && integerLengthAfterEdit > 6) {
+        event.preventDefault();
+      }
+      return;
     }
 
-    return sanitized;
+    event.preventDefault();
+  };
+
+  const handlePaste = (event: ClipboardEvent) => {
+    const pasted = event.clipboardData?.getData('text') ?? '';
+    if (!/^[0-9.]+$/.test(pasted)) {
+      event.preventDefault();
+      return;
+    }
+
+    const input = event.target as HTMLInputElement;
+    const [integerPart = '', decimalPart = ''] = pasted.split('.');
+    if (integerPart.length > 6 || decimalPart.length > 2 || (pasted.match(/\./g) || []).length > 1) {
+      event.preventDefault();
+    }
   };
 
   const handleInput = (field: FieldKey, rawValue: string) => {
@@ -82,17 +117,17 @@
     let valid = true;
 
     if (!isValidDecimal(originalPrice, MAX_PRICE)) {
-      validationErrors.originalPrice = 'Enter a valid non-negative original price up to 2 decimals.';
+      validationErrors.originalPrice = 'Enter a valid non-negative price with up to 2 decimals.';
       valid = false;
     }
 
     if (!isValidDecimal(surchargeRate, MAX_SURCHARGE_PERCENTAGE)) {
-      validationErrors.surchargeRate = 'Enter a valid non-negative surcharge up to 100%.';
+      validationErrors.surchargeRate = 'Enter a valid non-negative surcharge with up to 2 decimals.';
       valid = false;
     }
 
     if (!isValidDecimal(currentServiceFeeRate, MAX_SERVICE_FEE_RATE)) {
-      validationErrors.currentServiceFeeRate = 'Enter a valid non-negative decimal rate up to 1.0.';
+      validationErrors.currentServiceFeeRate = 'Enter a valid non-negative service fee with up to 2 decimals.';
       valid = false;
     }
 
@@ -176,8 +211,11 @@
             data-testid="original-price"
             value={originalPrice}
             on:input={(event) => handleInput('originalPrice', event.currentTarget.value)}
+            on:keydown={allowInputKey}
+            on:paste={handlePaste}
             class="w-full rounded-3xl border px-4 py-4 text-lg text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.originalPrice ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
           />
+          <p class="text-xs text-slate-500">Enter a valid non-negative price with up to 2 decimals.</p>
           {#if validationErrors.originalPrice}
             <p class="text-sm text-rose-600">{validationErrors.originalPrice}</p>
           {/if}
@@ -197,6 +235,8 @@
               value={surchargeRate}
               on:input={(event) => handleInput('surchargeRate', event.currentTarget.value)}
               class="w-full rounded-3xl border px-4 py-4 pr-14 text-lg text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.surchargeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
+              on:keydown={allowInputKey}
+              on:paste={handlePaste}
             />
             <span class="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-semibold text-slate-500">%</span>
           </div>
@@ -218,9 +258,11 @@
             data-testid="current-service-fee"
             value={currentServiceFeeRate}
             on:input={(event) => handleInput('currentServiceFeeRate', event.currentTarget.value)}
+            on:keydown={allowInputKey}
+            on:paste={handlePaste}
             class="w-full rounded-3xl border px-4 py-4 text-lg text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.currentServiceFeeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
           />
-          <p class="text-xs text-slate-500">Enter as decimal rate. Example: 0.1 = 10%</p>
+          <p class="text-xs text-slate-500">Enter as percentage. Example: 0.1 = 0.1%</p>
           {#if validationErrors.currentServiceFeeRate}
             <p class="text-sm text-rose-600">{validationErrors.currentServiceFeeRate}</p>
           {/if}
@@ -255,10 +297,9 @@
       <section class="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.18)]">
         <div class="mb-6 flex items-center justify-between gap-4">
           <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">Online Ordering</p>
             <h2 class="mt-2 text-2xl font-semibold text-slate-950">Online Ordering</h2>
           </div>
-          <span class="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">Item price includes surcharge</span>
+
         </div>
 
       <div class="space-y-4">
@@ -289,7 +330,7 @@
       <section class="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.18)]">
         <div class="mb-6 flex items-center justify-between gap-4">
           <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">Cart</p>
+           
             <h2 class="mt-2 text-2xl font-semibold text-slate-950">Cart</h2>
           </div>
         </div>
@@ -320,7 +361,7 @@
       <section class="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.18)]">
         <div class="mb-6 flex items-center justify-between gap-4">
           <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">DPOS Order Summary</p>
+        
             <h2 class="mt-2 text-2xl font-semibold text-slate-950">DPOS Order Summary</h2>
           </div>
         </div>
