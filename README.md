@@ -1,6 +1,6 @@
 # Surcharge Tool — Easy Overview
 
-This small SvelteKit project provides a simple business surcharge calculator UI with end-to-end Playwright tests. The README below explains the purpose of the project, how to run it, and a short, human-friendly description of the important files and folders so you can quickly find what you need.
+This small SvelteKit project provides a simple surcharge calculator UI with end-to-end Playwright tests. The README below explains the purpose of the project, how to run it, and a short description of the important files and folders so you can quickly find what you need.
 
 ## Quick start
 
@@ -14,7 +14,7 @@ This small SvelteKit project provides a simple business surcharge calculator UI 
 - Lets a user enter an original price and a surcharge percentage, then shows the surcharge amount and final price.
 - Contains business logic separated from UI so behavior is easy to test.
 
-## Short file descriptions (human-friendly)
+## Short file descriptions
 
 - **package.json**: Project metadata and scripts (install, build, preview, tests).
 - **README.md**: (this file) Quick project overview, run commands and file descriptions.
@@ -57,6 +57,5 @@ If you'd like, I can expand this README with:
 - A line-by-line explanation of `surcharge_tool_v1/src/routes/+page.svelte` (validation and normalization).
 - A full list of every file in the repo (longer, exhaustive catalog).
 
-Tell me which you prefer and I’ll update the README accordingly.
 # surcharge-tool
-A simple QA tool for calculating and validating item surcharges.
+A simple tool for calculating and validating item surcharges.
