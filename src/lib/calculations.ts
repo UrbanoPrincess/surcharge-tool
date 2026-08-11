@@ -5,7 +5,6 @@ export const MAX_SERVICE_FEE_RATE = 999999.99;
 export function roundHalfUp(value: number, decimals = 2): number {
   const stringValue = Math.abs(value).toFixed(decimals + 6);
   const [integerPart, fractionPart = ''] = stringValue.split('.');
-  const factor = 10 ** decimals;
   const paddedFraction = fractionPart.padEnd(decimals + 1, '0');
   const mainDigits = paddedFraction.slice(0, decimals);
   const roundDigit = Number(paddedFraction[decimals] || '0');
@@ -23,53 +22,44 @@ export function roundHalfUp(value: number, decimals = 2): number {
   return value < 0 ? -result : result;
 }
 
-export function calculateSurchargeAmount(originalPrice: number, surchargeRate: number): number {
-  return originalPrice * (surchargeRate / 100);
+// Surcharge multiplier = surcharge input × 0.1, applied to original price
+export function calculateSurchargeAmount(originalPrice: number, surchargeInput: number): number {
+  const surchargeMultiplier = surchargeInput * 0.1;
+  return roundHalfUp(originalPrice * surchargeMultiplier);
 }
 
-export function calculateCurrentServiceFeeAmount(
-  ooItemPrice: number,
-  currentServiceFeeRate: number,
-): number {
-  return ooItemPrice * currentServiceFeeRate;
-}
-
+// OO Item Price = Original Price + Surcharge
 export function calculateOoItemPrice(originalPrice: number, surchargeAmount: number): number {
-  return originalPrice + surchargeAmount;
+  return roundHalfUp(originalPrice + surchargeAmount);
 }
 
-export function calculateCartTotal(ooItemPrice: number, currentServiceFeeAmount: number): number {
-  return ooItemPrice + currentServiceFeeAmount;
+// Service Fee = OO Item Price × service fee input (used directly as multiplier)
+export function calculateServiceFeeAmount(ooItemPrice: number, serviceFeeInput: number): number {
+  return roundHalfUp(ooItemPrice * serviceFeeInput);
 }
 
-export function calculateExpectedDposServiceFee(
-  currentServiceFeeAmount: number,
-  surchargeAmount: number,
-): number {
-  return currentServiceFeeAmount + surchargeAmount;
+// Cart Total = OO Item Price + Service Fee
+export function calculateCartTotal(ooItemPrice: number, serviceFeeAmount: number): number {
+  return roundHalfUp(ooItemPrice + serviceFeeAmount);
 }
 
-export function calculateExpectedDposTotal(originalPrice: number, expectedDposServiceFee: number): number {
-  return originalPrice + expectedDposServiceFee;
-}
-
+/**
+ * Main Calculation Function
+ * @param originalPrice - The DPOS/Base price
+ * @param surchargeInput - Surcharge value (multiplied by 0.1 before applying to price)
+ * @param serviceFeeInput - Service fee multiplier (used directly, not converted)
+ */
 export function calculateTotals(
   originalPrice: number,
-  surchargeRate: number,
-  currentServiceFeeRate: number,
+  surchargeInput: number,
+  serviceFeeInput: number,
 ) {
-  const surchargeAmount = calculateSurchargeAmount(originalPrice, surchargeRate);
-  const ooItemPriceRaw = calculateOoItemPrice(originalPrice, surchargeAmount);
-  const ooItemPrice = roundHalfUp(ooItemPriceRaw);
-  const currentServiceFeeAmountRaw = calculateCurrentServiceFeeAmount(
-    ooItemPrice,
-    currentServiceFeeRate,
-  );
-  const currentServiceFeeAmount = roundHalfUp(currentServiceFeeAmountRaw);
-  const cartTotal = roundHalfUp(ooItemPrice + currentServiceFeeAmount);
-  const expectedDposServiceFeeRaw = currentServiceFeeAmount + surchargeAmount;
-  const expectedDposServiceFee = roundHalfUp(expectedDposServiceFeeRaw);
-  const expectedDposTotal = roundHalfUp(originalPrice + expectedDposServiceFeeRaw);
+  const surchargeAmount = calculateSurchargeAmount(originalPrice, surchargeInput);
+  const ooItemPrice = calculateOoItemPrice(originalPrice, surchargeAmount);
+  const currentServiceFeeAmount = calculateServiceFeeAmount(ooItemPrice, serviceFeeInput);
+  const cartTotal = calculateCartTotal(ooItemPrice, currentServiceFeeAmount);
+  const expectedDposServiceFee = roundHalfUp(currentServiceFeeAmount + surchargeAmount);
+  const expectedDposTotal = roundHalfUp(originalPrice + expectedDposServiceFee);
 
   return {
     surchargeAmount,
