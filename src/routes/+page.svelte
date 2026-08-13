@@ -37,7 +37,15 @@
     const limitedInteger = integer.slice(0, 6);
     const limitedDecimal = decimal.slice(0, 2);
 
-    return limitedDecimal ? `${limitedInteger}.${limitedDecimal}` : limitedInteger;
+    if (limitedDecimal) {
+      return `${limitedInteger}.${limitedDecimal}`;
+    }
+
+    if (cleaned.includes('.')) {
+      return `${limitedInteger}.`;
+    }
+
+    return limitedInteger;
   };
 
   const allowInputKey = (event: KeyboardEvent) => {
@@ -113,6 +121,14 @@
     return Number.isFinite(numeric) && numeric >= 0 && numeric <= max;
   };
 
+  const isValidOptionalDecimal = (value: string, max: number) => {
+    const trimmed = value.trim();
+    if (trimmed === '') return true;
+    return isValidDecimal(trimmed, max);
+  };
+
+  const parseOptionalAmount = (value: string) => (value.trim() === '' ? 0 : parseAmount(value));
+
   const validateFields = () => {
     let valid = true;
 
@@ -126,7 +142,7 @@
       valid = false;
     }
 
-    if (!isValidDecimal(currentServiceFeeRate, MAX_SERVICE_FEE_RATE)) {
+    if (!isValidOptionalDecimal(currentServiceFeeRate, MAX_SERVICE_FEE_RATE)) {
       validationErrors.currentServiceFeeRate = 'Enter a valid non-negative service fee with up to 2 decimals.';
       valid = false;
     }
@@ -170,7 +186,7 @@
 
     const original = parseAmount(originalPrice);
     const surchargeRateValue = parseAmount(surchargeRate);
-    const currentServiceFeeRateValue = parseAmount(currentServiceFeeRate);
+    const currentServiceFeeRateValue = parseOptionalAmount(currentServiceFeeRate);
 
     const result = calculateTotals(original, surchargeRateValue, currentServiceFeeRateValue);
 
@@ -262,7 +278,7 @@
             on:paste={handlePaste}
             class="w-full rounded-3xl border px-4 py-4 text-lg text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.currentServiceFeeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
           />
-          <p class="text-xs text-slate-500">Enter as percentage. Example: 0.1 = 0.1%</p>
+          <p class="text-xs text-slate-500">Optional. Enter as percentage. Example: 0.1 = 0.1%</p>
           {#if validationErrors.currentServiceFeeRate}
             <p class="text-sm text-rose-600">{validationErrors.currentServiceFeeRate}</p>
           {/if}
@@ -343,7 +359,7 @@
 
         <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">
           <span class="text-sm font-medium text-slate-600">Current Service Fee Rate</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="cart-service-fee-rate">{hasCalculated ? `${formatTwoDecimals(parseAmount(currentServiceFeeRate))}%` : '—'}</span>
+          <span class="text-right text-lg font-semibold text-slate-950" data-testid="cart-service-fee-rate">{hasCalculated && currentServiceFeeRate.trim() !== '' ? `${formatTwoDecimals(parseAmount(currentServiceFeeRate))}%` : '—'}</span>
         </div>
 
         <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">

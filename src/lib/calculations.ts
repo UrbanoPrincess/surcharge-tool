@@ -22,10 +22,9 @@ export function roundHalfUp(value: number, decimals = 2): number {
   return value < 0 ? -result : result;
 }
 
-// Surcharge multiplier = surcharge input × 0.1, applied to original price
-export function calculateSurchargeAmount(originalPrice: number, surchargeInput: number): number {
-  const surchargeMultiplier = surchargeInput * 0.1;
-  return roundHalfUp(originalPrice * surchargeMultiplier);
+// Surcharge = original price × (surcharge rate / 100)
+export function calculateSurchargeAmount(originalPrice: number, surchargeRate: number): number {
+  return roundHalfUp(originalPrice * (surchargeRate / 100));
 }
 
 // OO Item Price = Original Price + Surcharge
@@ -46,7 +45,7 @@ export function calculateCartTotal(ooItemPrice: number, serviceFeeAmount: number
 /**
  * Main Calculation Function
  * @param originalPrice - The DPOS/Base price
- * @param surchargeInput - Surcharge value (multiplied by 0.1 before applying to price)
+ * @param surchargeRate - Surcharge percentage (e.g., 5 for 5%)
  * @param serviceFeeInput - Service fee multiplier (used directly, not converted)
  */
 export function calculateTotals(
