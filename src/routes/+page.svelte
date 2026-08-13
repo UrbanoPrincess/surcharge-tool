@@ -29,6 +29,7 @@
   let expectedDposServiceFee: number | null = null;
   let expectedDposTotal: number | null = null;
   let totalsMatch = false;
+  let showCalculationBreakdown = false;
 
   const sanitizeAmountInput = (value: string) => {
     const cleaned = value.replace(/[^0-9.]/g, '');
@@ -168,6 +169,7 @@
     expectedDposServiceFee = null;
     expectedDposTotal = null;
     totalsMatch = false;
+    showCalculationBreakdown = false;
   };
 
   const calculate = () => {
@@ -201,6 +203,21 @@
   };
 
   const displayValue = (value: number | null) => (value !== null ? formatTwoDecimals(value) : '—');
+
+  const formatDecimalMultiplier = (percentage: number) => {
+    const rateDecimals = percentage.toString().includes('.')
+      ? percentage.toString().split('.')[1].length
+      : 0;
+    const precision = Math.max(2, rateDecimals + 2);
+    return (percentage / 100)
+      .toFixed(precision)
+      .replace(/(\.\d*?[1-9])0+$/, '$1')
+      .replace(/\.0+$/, '');
+  };
+
+  const toggleCalculationBreakdown = () => {
+    showCalculationBreakdown = !showCalculationBreakdown;
+  };
 </script>
 
 <main class="min-h-screen bg-slate-100 px-4 py-10 text-slate-900">
@@ -305,6 +322,84 @@
       {#if formError}
         <div class="mt-6 rounded-3xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700" data-testid="form-error">
           {formError}
+        </div>
+      {/if}
+    </section>
+
+    <section class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_20px_60px_-30px_rgba(15,23,42,0.18)]">
+      <div class="p-6">
+        <button
+          type="button"
+          aria-expanded={showCalculationBreakdown}
+          data-testid="calculation-breakdown-toggle"
+          on:click={toggleCalculationBreakdown}
+          class="inline-flex w-full items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-left text-sm font-semibold text-slate-800 transition hover:border-slate-300 hover:bg-slate-100 sm:text-base"
+        >
+          <span>{showCalculationBreakdown ? 'Hide Calculation Breakdown' : 'Show Calculation Breakdown'}</span>
+          <span class="text-slate-500">{showCalculationBreakdown ? '−' : '+'}</span>
+        </button>
+      </div>
+
+      {#if showCalculationBreakdown}
+        <div class="border-t border-slate-200 px-6 pb-6" data-testid="calculation-breakdown">
+          {#if hasCalculated}
+            {@const original = parseAmount(originalPrice)}
+            {@const surchargeRateValue = parseAmount(surchargeRate)}
+            {@const serviceFeeInput = parseOptionalAmount(currentServiceFeeRate)}
+            {@const surchargeDecimal = formatDecimalMultiplier(surchargeRateValue)}
+
+            <div class="grid grid-cols-1 gap-x-6 gap-y-5 pt-5 sm:grid-cols-2 lg:grid-cols-3">
+              <div class="min-w-0 space-y-1">
+                <h3 class="text-xs font-semibold text-slate-600">Surcharge</h3>
+                <p class="break-words font-mono text-sm leading-6 text-slate-800">
+                  {formatTwoDecimals(original)} × {surchargeDecimal} = {displayValue(surchargeAmount)}
+                </p>
+              </div>
+
+              <div class="min-w-0 space-y-1">
+                <h3 class="text-xs font-semibold text-slate-600">Expected OO Item Price</h3>
+                <p class="break-words font-mono text-sm leading-6 text-slate-800">
+                  {formatTwoDecimals(original)} + {displayValue(surchargeAmount)} = {displayValue(ooItemPrice)}
+                </p>
+              </div>
+
+              <div class="min-w-0 space-y-1">
+                <h3 class="text-xs font-semibold text-slate-600">Current Service Fee</h3>
+                {#if currentServiceFeeRate.trim() === ''}
+                  <p class="break-words font-mono text-sm leading-6 text-slate-800">
+                    {displayValue(ooItemPrice)} × 0.00 = {displayValue(currentServiceFeeAmount)}
+                  </p>
+                {:else}
+                  <p class="break-words font-mono text-sm leading-6 text-slate-800">
+                    {displayValue(ooItemPrice)} × {formatTwoDecimals(serviceFeeInput)} = {displayValue(currentServiceFeeAmount)}
+                  </p>
+                {/if}
+              </div>
+
+              <div class="min-w-0 space-y-1">
+                <h3 class="text-xs font-semibold text-slate-600">Expected Cart Total</h3>
+                <p class="break-words font-mono text-sm leading-6 text-slate-800">
+                  {displayValue(ooItemPrice)} + {displayValue(currentServiceFeeAmount)} = {displayValue(cartTotal)}
+                </p>
+              </div>
+
+              <div class="min-w-0 space-y-1">
+                <h3 class="text-xs font-semibold text-slate-600">DPOS Service Fee</h3>
+                <p class="break-words font-mono text-sm leading-6 text-slate-800">
+                  {displayValue(currentServiceFeeAmount)} + {displayValue(surchargeAmount)} = {displayValue(expectedDposServiceFee)}
+                </p>
+              </div>
+
+              <div class="min-w-0 space-y-1">
+                <h3 class="text-xs font-semibold text-slate-600">Expected DPOS Total</h3>
+                <p class="break-words font-mono text-sm leading-6 text-slate-800">
+                  {formatTwoDecimals(original)} + {displayValue(expectedDposServiceFee)} = {displayValue(expectedDposTotal)}
+                </p>
+              </div>
+            </div>
+          {:else}
+            <p class="pt-5 text-sm text-slate-500">Enter values and click Calculate to view the breakdown.</p>
+          {/if}
         </div>
       {/if}
     </section>
