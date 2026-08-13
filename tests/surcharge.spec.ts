@@ -173,6 +173,27 @@ test('calculate without current service fee treats fee as zero', async ({ page }
   await expect(page.getByTestId('dpos-total')).toHaveText('25.20');
 });
 
+test('calculation breakdown shows steps after calculate', async ({ page }) => {
+  await page.getByLabel('Original Price').fill('63.00');
+  await page.getByLabel('Surcharge').fill('5');
+  await page.getByLabel('Current Service Fee').fill('');
+  await page.getByRole('button', { name: 'Calculate' }).click();
+
+  await expect(page.getByTestId('calculation-breakdown')).toHaveCount(0);
+
+  await page.getByTestId('calculation-breakdown-toggle').click();
+
+  const breakdown = page.getByTestId('calculation-breakdown');
+  await expect(breakdown).toBeVisible();
+  await expect(breakdown).toContainText('63.00 × 0.05 = 3.15');
+  await expect(breakdown).toContainText('63.00 + 3.15 = 66.15');
+  await expect(breakdown).toContainText('Expected DPOS Total');
+
+  await page.getByTestId('calculation-breakdown-toggle').click();
+  await expect(page.getByTestId('calculation-breakdown')).toHaveCount(0);
+  await expect(page.getByTestId('calculation-breakdown-toggle')).toContainText('Show Calculation Breakdown');
+});
+
 test('invalid input shows validation message and blocks calculation', async ({ page }) => {
   await page.getByLabel('Original Price').fill('');
   await page.getByLabel('Surcharge').fill('1');
