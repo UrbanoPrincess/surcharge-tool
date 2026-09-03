@@ -1,15 +1,31 @@
 <script lang="ts">
+  import { onDestroy, onMount, tick } from 'svelte';
+
   import {
-    calculateTotals,
+    calculateCartTotal,
+    calculateOoItemPrice,
+    calculateServiceFeeAmount,
+    calculateSurchargeAmount,
     formatTwoDecimals,
     MAX_PRICE,
     MAX_SURCHARGE_PERCENTAGE,
     MAX_SERVICE_FEE_RATE,
+    roundHalfUp,
   } from '$lib/calculations';
 
-  type FieldKey = 'originalPrice' | 'surchargeRate' | 'currentServiceFeeRate';
+  import {
+    startOrderPolling,
+    stopOrderPolling,
+  } from '$lib/orderPolling';
 
-  let originalPrice = '';
+  type FieldKey =
+    | 'originalPrice'
+    | 'surchargeRate'
+    | 'currentServiceFeeRate';
+
+  type Item = { price: string; error: string };
+
+  let items: Item[] = [{ price: '', error: '' }];
   let surchargeRate = '';
   let currentServiceFeeRate = '';
 
@@ -25,11 +41,37 @@
   let surchargeAmount: number | null = null;
   let currentServiceFeeAmount: number | null = null;
   let ooItemPrice: number | null = null;
+  let calculatedItems: { original: number; surcharge: number; ooPrice: number }[] = [];
   let cartTotal: number | null = null;
   let expectedDposServiceFee: number | null = null;
   let expectedDposTotal: number | null = null;
   let totalsMatch = false;
   let showCalculationBreakdown = false;
+  let showItems = false;
+  let itemInputs: HTMLInputElement[] = [];
+  let itemsPopover: HTMLDivElement;
+  let itemsTrigger: HTMLButtonElement;
+
+  const dismissItemsPopover = (event: MouseEvent) => {
+    const target = event.target as Node;
+    if (!itemsPopover?.contains(target) && !itemsTrigger?.contains(target)) {
+      showItems = false;
+    }
+  };
+
+  const handleItemsEscape = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') showItems = false;
+  };
+
+  onMount(() => {
+    document.addEventListener('click', dismissItemsPopover);
+    document.addEventListener('keydown', handleItemsEscape);
+
+    return () => {
+      document.removeEventListener('click', dismissItemsPopover);
+      document.removeEventListener('keydown', handleItemsEscape);
+    };
+  });
 
   const sanitizeAmountInput = (value: string) => {
     const cleaned = value.replace(/[^0-9.]/g, '');
@@ -100,10 +142,14 @@
     }
   };
 
-  const handleInput = (field: FieldKey, rawValue: string) => {
+  const handleInput = (field: FieldKey, rawValue: string, itemIndex = 0) => {
     const sanitized = sanitizeAmountInput(rawValue);
 
-    if (field === 'originalPrice') originalPrice = sanitized;
+    if (field === 'originalPrice') {
+      items[itemIndex].price = sanitized;
+      items[itemIndex].error = '';
+      items = items;
+    }
     if (field === 'surchargeRate') surchargeRate = sanitized;
     if (field === 'currentServiceFeeRate') currentServiceFeeRate = sanitized;
 
@@ -133,10 +179,17 @@
   const validateFields = () => {
     let valid = true;
 
-    if (!isValidDecimal(originalPrice, MAX_PRICE)) {
+    if (!isValidDecimal(items[0].price, MAX_PRICE)) {
       validationErrors.originalPrice = 'Enter a valid non-negative price with up to 2 decimals.';
       valid = false;
     }
+
+    items = items.map((item, index) => ({
+      ...item,
+      error: index === 0 || item.price.trim() === '' || isValidDecimal(item.price, MAX_PRICE)
+        ? ''
+        : 'Enter a valid non-negative price with up to 2 decimals.',
+    }));
 
     if (!isValidDecimal(surchargeRate, MAX_SURCHARGE_PERCENTAGE)) {
       validationErrors.surchargeRate = 'Enter a valid non-negative surcharge with up to 2 decimals.';
@@ -151,8 +204,34 @@
     return valid;
   };
 
+  const addItem = async () => {
+    const latestIndex = items.length - 1;
+    const latestItem = items[latestIndex];
+    if (!isValidDecimal(latestItem.price, MAX_PRICE)) {
+      latestItem.error = 'Enter a valid price before adding another item.';
+      items = items;
+      showItems = true;
+      await tick();
+      itemInputs[latestIndex]?.focus();
+      return;
+    }
+
+    items = [...items, { price: '', error: '' }];
+    showItems = true;
+    await tick();
+    itemInputs[items.length - 1]?.focus();
+  };
+
+  const removeItem = (itemIndex: number) => {
+    items = items.filter((_, index) => index !== itemIndex);
+    if (items.length === 1) showItems = false;
+    calculatedItems = [];
+    hasCalculated = false;
+  };
+
   const reset = () => {
-    originalPrice = '';
+    items = [{ price: '', error: '' }];
+    showItems = false;
     surchargeRate = '';
     currentServiceFeeRate = '';
     validationErrors = {
@@ -165,6 +244,7 @@
     surchargeAmount = null;
     currentServiceFeeAmount = null;
     ooItemPrice = null;
+    calculatedItems = [];
     cartTotal = null;
     expectedDposServiceFee = null;
     expectedDposTotal = null;
@@ -186,12 +266,30 @@
       return;
     }
 
-    const original = parseAmount(originalPrice);
     const surchargeRateValue = parseAmount(surchargeRate);
     const currentServiceFeeRateValue = parseOptionalAmount(currentServiceFeeRate);
 
-    const result = calculateTotals(original, surchargeRateValue, currentServiceFeeRateValue);
+    const validItems = items
+      .filter((item, index) => index === 0 || isValidDecimal(item.price, MAX_PRICE))
+      .map((item) => {
+        const original = parseAmount(item.price);
+        const surcharge = calculateSurchargeAmount(original, surchargeRateValue);
+        return { original, surcharge, ooPrice: calculateOoItemPrice(original, surcharge) };
+      });
+    const originalTotal = validItems.reduce((total, item) => total + item.original, 0);
+    const surchargeTotal = validItems.reduce((total, item) => total + item.surcharge, 0);
+    const ooTotal = validItems.reduce((total, item) => total + item.ooPrice, 0);
+    const currentFee = calculateServiceFeeAmount(ooTotal, currentServiceFeeRateValue);
+    const result = {
+      surchargeAmount: surchargeTotal,
+      currentServiceFeeAmount: currentFee,
+      ooItemPrice: ooTotal,
+      cartTotal: calculateCartTotal(ooTotal, currentFee),
+      expectedDposServiceFee: roundHalfUp(currentFee + surchargeTotal),
+      expectedDposTotal: roundHalfUp(originalTotal + roundHalfUp(currentFee + surchargeTotal)),
+    };
 
+    calculatedItems = validItems;
     surchargeAmount = result.surchargeAmount;
     currentServiceFeeAmount = result.currentServiceFeeAmount;
     ooItemPrice = result.ooItemPrice;
@@ -218,22 +316,63 @@
   const toggleCalculationBreakdown = () => {
     showCalculationBreakdown = !showCalculationBreakdown;
   };
+
+  let orderData: unknown = null;
+let orderError = '';
+let isPolling = false;
+
+function startPolling() {
+  isPolling = true;
+
+  startOrderPolling(
+    (data) => {
+      orderData = data;
+      orderError = '';
+
+      console.log('Order API:', data);
+    },
+    (error) => {
+      orderError =
+        error instanceof Error ? error.message : 'Failed to fetch orders';
+
+      console.error('Order API error:', error);
+    }
+  );
+}
+
+function stopPolling() {
+  isPolling = false;
+  stopOrderPolling();
+}
+
+onDestroy(() => {
+  stopOrderPolling();
+});
 </script>
 
-<main class="min-h-screen bg-slate-100 px-4 py-10 text-slate-900">
-  <div class="mx-auto flex w-full max-w-6xl flex-col gap-8">
-    <section class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-8 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.20)]">
-      <div class="space-y-4">
+<main class="min-h-screen bg-[#fafafa] px-4 py-6 text-slate-900 tabular-nums sm:py-10">
+  <div class="mx-auto flex w-full max-w-6xl flex-col gap-5">
+    <section class="relative z-20 overflow-visible rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)] sm:p-7">
+      <div class="space-y-2">
+<!--
+<button
+  type="button"
+  on:click={isPolling ? stopPolling : startPolling}
+  class="rounded-3xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white"
+>
+  {isPolling ? 'Stop Polling' : 'Start Polling'}
+</button>
 
-        <h1 class="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Surcharge Calculator</h1>
-        <p class="max-w-2xl text-base text-slate-600">
-          Validate the Online Ordering, Cart, and DPOS behavior for a single item using percentage-based surcharge and service fee rates.
+        <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">QA Utility / Calculation Suite</p>-->
+        <h1 class="text-3xl font-bold tracking-tight text-slate-950">Surcharge Calculator</h1>
+        <p class="max-w-2xl text-sm text-slate-500">
+          Validate the Online Ordering, Cart, and DPOS behavior for surcharge and service fee calculations.
         </p>
       </div>
 
-      <div class="mt-10 grid gap-4 sm:grid-cols-3">
-        <label class="space-y-3">
-          <span class="block text-sm font-medium text-slate-700">Original Price</span>
+      <div class="mt-8 grid min-w-0 gap-4 md:grid-cols-3">
+        <label class="relative min-w-0 space-y-2">
+          <span class="block text-sm font-semibold text-slate-800">Original Price</span>
           <input
             type="text"
             inputmode="decimal"
@@ -242,20 +381,44 @@
             aria-label="Original Price"
             aria-invalid={validationErrors.originalPrice ? 'true' : 'false'}
             data-testid="original-price"
-            value={originalPrice}
+            value={items[0].price}
             on:input={(event) => handleInput('originalPrice', event.currentTarget.value)}
             on:keydown={allowInputKey}
             on:paste={handlePaste}
-            class="w-full rounded-3xl border px-4 py-4 text-lg text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.originalPrice ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
+            class="w-full rounded-xl border px-4 py-3 text-base font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.originalPrice ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
           />
-          <p class="text-xs text-slate-500">Enter a valid non-negative price with up to 2 decimals.</p>
+          <p class="text-xs text-slate-500">Enter the first item price.</p>
           {#if validationErrors.originalPrice}
             <p class="text-sm text-rose-600">{validationErrors.originalPrice}</p>
           {/if}
+          <div class="relative mt-5">
+            <button type="button" bind:this={itemsTrigger} data-testid="add-item" on:click={addItem} class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-400">
+              <span class="text-base leading-none">+</span> Add Item <span class="font-mono text-slate-500">{items.length}</span>
+            </button>
+            {#if showItems}
+              <div bind:this={itemsPopover} class="absolute left-0 top-full z-10 mt-2 w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-[0_12px_28px_-14px_rgba(15,23,42,0.45)]">
+                <div class="flex items-center justify-between border-b border-slate-200 px-1 pb-2 text-sm font-semibold text-slate-800">
+                  <span>Items</span>
+                  <button type="button" aria-label="Close items" on:click={() => (showItems = false)} class="text-base font-normal text-slate-500 hover:text-slate-900">×</button>
+                </div>
+                <div class="max-h-[300px] space-y-2 overflow-y-auto py-2">
+                  {#each items as item, itemIndex}
+                    <div class="flex items-center gap-2">
+                      <span class="w-12 shrink-0 text-sm text-slate-600">Item {itemIndex + 1}</span>
+                      <input type="text" inputmode="decimal" autocomplete="off" placeholder="15.00" aria-label={`Item ${itemIndex + 1} Price`} aria-invalid={item.error ? 'true' : 'false'} data-testid={`item-price-${itemIndex + 1}`} bind:this={itemInputs[itemIndex]} value={item.price} on:input={(event) => handleInput('originalPrice', event.currentTarget.value, itemIndex)} on:keydown={allowInputKey} on:paste={handlePaste} class="min-w-0 flex-1 rounded-lg border px-3 py-2 text-base font-medium text-slate-900 outline-none focus:border-slate-400 {item.error ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}" />
+                      {#if items.length > 1}<button type="button" aria-label={`Remove Item ${itemIndex + 1}`} on:click={() => removeItem(itemIndex)} class="text-base text-slate-500 hover:text-slate-900">×</button>{/if}
+                    </div>
+                    {#if item.error}<p class="text-xs text-rose-600">{item.error}</p>{/if}
+                  {/each}
+                </div>
+                <button type="button" on:click={addItem} class="w-full rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400">Add another item</button>
+              </div>
+            {/if}
+          </div>
         </label>
 
-        <label class="space-y-3">
-          <span class="block text-sm font-medium text-slate-700">Surcharge</span>
+        <label class="min-w-0 space-y-3">
+          <span class="block text-sm font-semibold text-slate-800">Surcharge</span>
           <div class="relative">
             <input
               type="text"
@@ -267,20 +430,20 @@
               data-testid="surcharge"
               value={surchargeRate}
               on:input={(event) => handleInput('surchargeRate', event.currentTarget.value)}
-              class="w-full rounded-3xl border px-4 py-4 pr-14 text-lg text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.surchargeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
+              class="w-full rounded-xl border px-4 py-3 pr-14 text-base font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.surchargeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
               on:keydown={allowInputKey}
               on:paste={handlePaste}
             />
             <span class="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-semibold text-slate-500">%</span>
           </div>
-          <p class="text-xs text-slate-500">Enter as percentage. Example: 1 = 1%</p>
+          <p class="text-xs text-slate-500">Enter percentage (e.g., 1% = 0.01).</p>
           {#if validationErrors.surchargeRate}
             <p class="text-sm text-rose-600">{validationErrors.surchargeRate}</p>
           {/if}
         </label>
 
-        <label class="space-y-3">
-          <span class="block text-sm font-medium text-slate-700">Current Service Fee</span>
+        <label class="min-w-0 space-y-3">
+          <span class="block text-sm font-semibold text-slate-800">Current Service Fee</span>
           <input
             type="text"
             inputmode="decimal"
@@ -293,27 +456,28 @@
             on:input={(event) => handleInput('currentServiceFeeRate', event.currentTarget.value)}
             on:keydown={allowInputKey}
             on:paste={handlePaste}
-            class="w-full rounded-3xl border px-4 py-4 text-lg text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.currentServiceFeeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
+            class="w-full rounded-xl border px-4 py-3 text-base font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.currentServiceFeeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
           />
-          <p class="text-xs text-slate-500">Optional. Enter as percentage. Example: 0.1 = 0.1%</p>
+          <p class="text-xs text-slate-500">Fixed fee applied to the cart.</p>
           {#if validationErrors.currentServiceFeeRate}
             <p class="text-sm text-rose-600">{validationErrors.currentServiceFeeRate}</p>
           {/if}
         </label>
       </div>
 
-      <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end">
+      <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
         <button
           type="button"
           on:click={reset}
-          class="inline-flex justify-center rounded-3xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+          class="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
         >
           Reset
         </button>
         <button
           type="button"
           on:click={calculate}
-          class="inline-flex justify-center rounded-3xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+          disabled={!isValidDecimal(items[0].price, MAX_PRICE) || !isValidDecimal(surchargeRate, MAX_SURCHARGE_PERCENTAGE)}
+          class="inline-flex justify-center rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Calculate
         </button>
@@ -326,7 +490,7 @@
       {/if}
     </section>
 
-    <section class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_20px_60px_-30px_rgba(15,23,42,0.18)]">
+    <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
       <div class="p-6">
         <button
           type="button"
@@ -343,24 +507,23 @@
       {#if showCalculationBreakdown}
         <div class="border-t border-slate-200 px-6 pb-6" data-testid="calculation-breakdown">
           {#if hasCalculated}
-            {@const original = parseAmount(originalPrice)}
             {@const surchargeRateValue = parseAmount(surchargeRate)}
             {@const serviceFeeInput = parseOptionalAmount(currentServiceFeeRate)}
             {@const surchargeDecimal = formatDecimalMultiplier(surchargeRateValue)}
 
-            <div class="grid grid-cols-1 gap-x-6 gap-y-5 pt-5 sm:grid-cols-2 lg:grid-cols-3">
-              <div class="min-w-0 space-y-1">
-                <h3 class="text-xs font-semibold text-slate-600">Surcharge</h3>
-                <p class="break-words font-mono text-sm leading-6 text-slate-800">
-                  {formatTwoDecimals(original)} × {surchargeDecimal} = {displayValue(surchargeAmount)}
-                </p>
+            <div class="grid min-w-0 grid-cols-1 gap-6 pt-5 md:grid-cols-2 lg:grid-cols-3">
+              <div class="flex min-w-0 flex-col">
+                <h3 class="text-xs font-semibold leading-4 text-slate-600">Surcharge</h3>
+                {#each calculatedItems as item}
+                  <p class="break-words font-mono text-sm leading-6 text-slate-800">{formatTwoDecimals(item.original)} × {surchargeDecimal} = {formatTwoDecimals(item.surcharge)}</p>
+                {/each}
               </div>
 
               <div class="min-w-0 space-y-1">
                 <h3 class="text-xs font-semibold text-slate-600">Expected OO Item Price</h3>
-                <p class="break-words font-mono text-sm leading-6 text-slate-800">
-                  {formatTwoDecimals(original)} + {displayValue(surchargeAmount)} = {displayValue(ooItemPrice)}
-                </p>
+                {#each calculatedItems as item}
+                  <p class="break-words font-mono text-sm leading-6 text-slate-800">{formatTwoDecimals(item.original)} + {formatTwoDecimals(item.surcharge)} = {formatTwoDecimals(item.ooPrice)}</p>
+                {/each}
               </div>
 
               <div class="min-w-0 space-y-1">
@@ -392,9 +555,9 @@
 
               <div class="min-w-0 space-y-1">
                 <h3 class="text-xs font-semibold text-slate-600">Expected DPOS Total</h3>
-                <p class="break-words font-mono text-sm leading-6 text-slate-800">
-                  {formatTwoDecimals(original)} + {displayValue(expectedDposServiceFee)} = {displayValue(expectedDposTotal)}
-                </p>
+                  <p class="break-words font-mono text-sm leading-6 text-slate-800">
+                    {formatTwoDecimals(calculatedItems.reduce((total, item) => total + item.original, 0))} + {displayValue(expectedDposServiceFee)} = {displayValue(expectedDposTotal)}
+                  </p>
               </div>
             </div>
           {:else}
@@ -404,103 +567,106 @@
       {/if}
     </section>
 
-    <div class="grid gap-6 lg:grid-cols-3">
-      <section class="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.18)]">
+    <div class="grid min-w-0 gap-4 md:grid-cols-3">
+      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
         <div class="mb-6 flex items-center justify-between gap-4">
           <div>
-            <h2 class="mt-2 text-2xl font-semibold text-slate-950">Online Ordering</h2>
+            <h2 class="text-xl font-semibold text-slate-950">Online Ordering</h2>
           </div>
 
         </div>
 
-      <div class="space-y-4">
-        <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Original Price</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="oo-original-price">{hasCalculated ? formatTwoDecimals(parseAmount(originalPrice)) : '—'}</span>
+      <div class="space-y-2">
+        <div class="mb-1 grid grid-cols-3 gap-5 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <span class="text-center">Original</span><span class="text-center">Surcharge</span><span class="text-center">OO Price</span>
         </div>
-
-        <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Surcharge Rate</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="oo-surcharge">{hasCalculated ? `${formatTwoDecimals(parseAmount(surchargeRate))}%` : '—'}</span>
-        </div>
-
-        <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Surcharge Amount</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="oo-surcharge-amount">{displayValue(surchargeAmount)}</span>
-        </div>
-
-        <div class="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Expected OO Item Price</span>
-          <span class="text-right text-xl font-semibold text-slate-950" data-testid="oo-item-price">{displayValue(ooItemPrice)}</span>
-        </div>
+        {#each calculatedItems as item, index}
+          <div class="grid grid-cols-3 items-center gap-5 rounded-lg bg-slate-50 px-3 py-2 font-mono text-[15px] text-slate-900">
+            <span class="text-center" data-testid={index === 0 ? 'oo-original-price' : `oo-original-price-${index + 1}`}>{formatTwoDecimals(item.original)}</span>
+            <span class="text-center" data-testid={index === 0 ? 'oo-surcharge-amount' : `oo-surcharge-amount-${index + 1}`}>{formatTwoDecimals(item.surcharge)}</span>
+            <span class="text-center font-semibold" data-testid={index === 0 ? 'oo-item-price' : `oo-item-price-${index + 1}`}>{formatTwoDecimals(item.ooPrice)}</span>
+          </div>
+        {:else}
+          <div class="grid grid-cols-3 rounded-lg bg-slate-50 px-3 py-2 text-xs"><span class="text-center">—</span><span class="text-center">—</span><span class="text-center" data-testid="oo-item-price">—</span></div>
+        {/each}
+        <span class="sr-only" data-testid="oo-surcharge">{hasCalculated ? `${formatTwoDecimals(parseAmount(surchargeRate))}%` : '—'}</span>
 
         <p class="text-sm text-slate-500">The surcharge is included in the displayed item price.</p>
       </div>
     </section>
 
-      <section class="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.18)]">
+      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
         <div class="mb-6 flex items-center justify-between gap-4">
           <div>
            
-            <h2 class="mt-2 text-2xl font-semibold text-slate-950">Cart</h2>
+            <h2 class="text-xl font-semibold text-slate-950">Cart</h2>
           </div>
         </div>
 
-      <div class="space-y-4">
-        <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Item Price</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="cart-item-price">{displayValue(ooItemPrice)}</span>
+      <div class="space-y-3">
+        <div class="space-y-2">
+          <p class="px-1 text-xs font-medium text-slate-600">Item Price</p>
+          {#each calculatedItems as item, index}
+            <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
+              <span class="text-sm font-medium text-slate-600">Item {index + 1}</span>
+              <span class="text-right text-[15px] font-medium text-slate-950" data-testid={index === 0 ? 'cart-item-price' : `cart-item-price-${index + 1}`}>{formatTwoDecimals(item.ooPrice)}</span>
+            </div>
+          {:else}
+            <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]"><span class="text-sm font-medium text-slate-600">Item 1</span><span class="text-right text-sm font-semibold text-slate-950" data-testid="cart-item-price">—</span></div>
+          {/each}
         </div>
 
-        <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Current Service Fee Rate</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="cart-service-fee-rate">{hasCalculated && currentServiceFeeRate.trim() !== '' ? `${formatTwoDecimals(parseAmount(currentServiceFeeRate))}%` : '—'}</span>
-        </div>
-
-        <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">
+        <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
           <span class="text-sm font-medium text-slate-600">Current Service Fee</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="cart-service-fee">{displayValue(currentServiceFeeAmount)}</span>
+          <span class="text-right text-[15px] font-medium text-slate-950" data-testid="cart-service-fee">{displayValue(currentServiceFeeAmount)}</span>
         </div>
 
-        <div class="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Expected Cart Total</span>
-          <span class="text-right text-xl font-semibold text-slate-950" data-testid="cart-total">{displayValue(cartTotal)}</span>
+        <div class="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]">
+          <span class="text-sm font-semibold text-slate-900">Expected Cart Total</span>
+          <span class="text-right text-lg font-semibold text-slate-950" data-testid="cart-total">{displayValue(cartTotal)}</span>
         </div>
       </div>
     </section>
 
-      <section class="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.18)]">
+      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
         <div class="mb-6 flex items-center justify-between gap-4">
           <div>
         
-            <h2 class="mt-2 text-2xl font-semibold text-slate-950">DPOS Order Summary</h2>
+            <h2 class="text-xl font-semibold text-slate-950">DPOS Order Summary</h2>
           </div>
         </div>
 
-      <div class="space-y-4">
-        <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Original Item Price</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="dpos-original-price">{hasCalculated ? formatTwoDecimals(parseAmount(originalPrice)) : '—'}</span>
+      <div class="space-y-3">
+        <div class="space-y-2">
+          <p class="px-1 text-xs font-medium text-slate-600">Original Item Price</p>
+          {#each calculatedItems as item, index}
+            <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
+              <span class="text-sm font-medium text-slate-600">Item {index + 1}</span>
+              <span class="text-right text-[15px] font-medium text-slate-950" data-testid={index === 0 ? 'dpos-original-price' : `dpos-original-price-${index + 1}`}>{formatTwoDecimals(item.original)}</span>
+            </div>
+          {:else}
+            <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]"><span class="text-sm font-medium text-slate-600">Item 1</span><span class="text-right text-sm font-semibold text-slate-950" data-testid="dpos-original-price">—</span></div>
+          {/each}
         </div>
 
-        <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">
+        <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
           <span class="text-sm font-medium text-slate-600">Surcharge Transferred to Service Fee</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="dpos-transfer-fee">{displayValue(surchargeAmount)}</span>
+          <span class="text-right text-[15px] font-medium text-slate-950" data-testid="dpos-transfer-fee">{displayValue(surchargeAmount)}</span>
         </div>
 
-        <div class="grid gap-4 rounded-3xl bg-slate-50 p-5 sm:grid-cols-[1fr_auto]">
+        <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
           <span class="text-sm font-medium text-slate-600">Current Service Fee</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="dpos-current-fee">{displayValue(currentServiceFeeAmount)}</span>
+          <span class="text-right text-[15px] font-medium text-slate-950" data-testid="dpos-current-fee">{displayValue(currentServiceFeeAmount)}</span>
         </div>
 
-        <div class="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Expected DPOS Service Fee</span>
-          <span class="text-right text-xl font-semibold text-slate-950" data-testid="dpos-service-fee">{displayValue(expectedDposServiceFee)}</span>
+        <div class="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]">
+          <span class="text-sm font-semibold text-slate-900">Expected DPOS Service Fee</span>
+          <span class="text-right text-lg font-semibold text-slate-950" data-testid="dpos-service-fee">{displayValue(expectedDposServiceFee)}</span>
         </div>
 
-        <div class="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Expected DPOS Total</span>
-          <span class="text-right text-xl font-semibold text-slate-950" data-testid="dpos-total">{displayValue(expectedDposTotal)}</span>
+        <div class="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]">
+          <span class="text-sm font-semibold text-slate-900">Expected DPOS Total</span>
+          <span class="text-right text-lg font-semibold text-slate-950" data-testid="dpos-total">{displayValue(expectedDposTotal)}</span>
         </div>
 
         <p class="text-sm text-slate-500">The original item price is preserved, while the item surcharge is added to the Service Fee.</p>
