@@ -371,7 +371,7 @@ onDestroy(() => {
       </div>
 
       <div class="mt-8 grid min-w-0 gap-4 md:grid-cols-3">
-        <label class="relative min-w-0 space-y-2">
+        <label class="relative min-w-0 space-y-3">
           <span class="block text-sm font-semibold text-slate-800">Original Price</span>
           <input
             type="text"
