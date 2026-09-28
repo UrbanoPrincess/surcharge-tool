@@ -99,6 +99,7 @@ test('full QA flow calculates all fields and totals match', async ({ page }) => 
   await expect(page.getByTestId('cart-total')).toHaveText('163.46');
 
   await expect(page.getByTestId('dpos-original-price')).toHaveText('13.51');
+  await expect(page.getByTestId('dpos-current-fee')).toHaveText('148.60');
   await expect(page.getByTestId('dpos-service-fee')).toHaveText('149.95');
   await expect(page.getByTestId('dpos-total')).toHaveText('163.46');
 });

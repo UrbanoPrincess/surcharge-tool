@@ -197,7 +197,7 @@
     }
 
     if (!isValidOptionalDecimal(currentServiceFeeRate, MAX_SERVICE_FEE_RATE)) {
-      validationErrors.currentServiceFeeRate = 'Enter a valid non-negative service fee with up to 2 decimals.';
+      validationErrors.currentServiceFeeRate = 'Enter a valid non-negative platform fee with up to 2 decimals.';
       valid = false;
     }
 
