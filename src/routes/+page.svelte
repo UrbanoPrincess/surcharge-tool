@@ -192,7 +192,7 @@
     }));
 
     if (!isValidDecimal(surchargeRate, MAX_SURCHARGE_PERCENTAGE)) {
-      validationErrors.surchargeRate = 'Enter a valid non-negative surcharge with up to 2 decimals.';
+      validationErrors.surchargeRate = 'Enter a valid non-negative embedded item fee with up to 2 decimals.';
       valid = false;
     }
 
@@ -364,9 +364,9 @@ onDestroy(() => {
 </button>
 
         <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">QA Utility / Calculation Suite</p>-->
-        <h1 class="text-3xl font-bold tracking-tight text-slate-950">Surcharge Calculator</h1>
+        <h1 class="text-3xl font-bold tracking-tight text-slate-950">Embedded Item Fee Calculator</h1>
         <p class="max-w-2xl text-sm text-slate-500">
-          Validate the Online Ordering, Cart, and DPOS behavior for surcharge and service fee calculations.
+          Validate the Online Ordering, Cart, and DPOS behavior for embedded item fee and platform fee calculations.
         </p>
       </div>
 
@@ -418,14 +418,14 @@ onDestroy(() => {
         </label>
 
         <label class="min-w-0 space-y-3">
-          <span class="block text-sm font-semibold text-slate-800">Surcharge</span>
+          <span class="block text-sm font-semibold text-slate-800">Embedded Item Fee</span>
           <div class="relative">
             <input
               type="text"
               inputmode="decimal"
               autocomplete="off"
               placeholder="1"
-              aria-label="Surcharge"
+              aria-label="Embedded Item Fee"
               aria-invalid={validationErrors.surchargeRate ? 'true' : 'false'}
               data-testid="surcharge"
               value={surchargeRate}
@@ -443,13 +443,13 @@ onDestroy(() => {
         </label>
 
         <label class="min-w-0 space-y-3">
-          <span class="block text-sm font-semibold text-slate-800">Current Service Fee</span>
+          <span class="block text-sm font-semibold text-slate-800">Current Platform Fee</span>
           <input
             type="text"
             inputmode="decimal"
             autocomplete="off"
             placeholder="0.1"
-            aria-label="Current Service Fee"
+            aria-label="Current Platform Fee"
             aria-invalid={validationErrors.currentServiceFeeRate ? 'true' : 'false'}
             data-testid="current-service-fee"
             value={currentServiceFeeRate}
@@ -458,7 +458,7 @@ onDestroy(() => {
             on:paste={handlePaste}
             class="w-full rounded-xl border px-4 py-3 text-base font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.currentServiceFeeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
           />
-          <p class="text-xs text-slate-500">Fixed fee applied to the cart.</p>
+          <p class="text-xs text-slate-500">Platform fee rate applied to the cart.</p>
           {#if validationErrors.currentServiceFeeRate}
             <p class="text-sm text-rose-600">{validationErrors.currentServiceFeeRate}</p>
           {/if}
@@ -513,7 +513,7 @@ onDestroy(() => {
 
             <div class="grid min-w-0 grid-cols-1 gap-6 pt-5 md:grid-cols-2 lg:grid-cols-3">
               <div class="flex min-w-0 flex-col">
-                <h3 class="text-xs font-semibold leading-4 text-slate-600">Surcharge</h3>
+                <h3 class="text-xs font-semibold leading-4 text-slate-600">Embedded Item Fee</h3>
                 {#each calculatedItems as item}
                   <p class="break-words font-mono text-sm leading-6 text-slate-800">{formatTwoDecimals(item.original)} × {surchargeDecimal} = {formatTwoDecimals(item.surcharge)}</p>
                 {/each}
@@ -527,7 +527,7 @@ onDestroy(() => {
               </div>
 
               <div class="min-w-0 space-y-1">
-                <h3 class="text-xs font-semibold text-slate-600">Current Service Fee</h3>
+                <h3 class="text-xs font-semibold text-slate-600">Current Platform Fee</h3>
                 {#if currentServiceFeeRate.trim() === ''}
                   <p class="break-words font-mono text-sm leading-6 text-slate-800">
                     {displayValue(ooItemPrice)} × 0.00 = {displayValue(currentServiceFeeAmount)}
@@ -547,18 +547,22 @@ onDestroy(() => {
               </div>
 
               <div class="min-w-0 space-y-1">
-                <h3 class="text-xs font-semibold text-slate-600">DPOS Service Fee</h3>
+                <h3 class="text-xs font-semibold text-slate-600">Platform Fee</h3>
                 <p class="break-words font-mono text-sm leading-6 text-slate-800">
                   {displayValue(currentServiceFeeAmount)} + {displayValue(surchargeAmount)} = {displayValue(expectedDposServiceFee)}
                 </p>
               </div>
 
               <div class="min-w-0 space-y-1">
-                <h3 class="text-xs font-semibold text-slate-600">Expected DPOS Total</h3>
+                <h3 class="text-xs font-semibold text-slate-600">Total</h3>
                   <p class="break-words font-mono text-sm leading-6 text-slate-800">
                     {formatTwoDecimals(calculatedItems.reduce((total, item) => total + item.original, 0))} + {displayValue(expectedDposServiceFee)} = {displayValue(expectedDposTotal)}
                   </p>
               </div>
+            </div>
+            <div class="mt-6 border-t border-slate-200 pt-4">
+              <h3 class="text-xs font-semibold text-slate-600">DPOS Calculation</h3>
+              <p class="mt-1 text-sm text-slate-500">The original item price is preserved, while the embedded item fee is added to the Platform Fee.</p>
             </div>
           {:else}
             <p class="pt-5 text-sm text-slate-500">Enter values and click Calculate to view the breakdown.</p>
@@ -567,7 +571,7 @@ onDestroy(() => {
       {/if}
     </section>
 
-    <div class="grid min-w-0 gap-4 md:grid-cols-3">
+    <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
         <div class="mb-6 flex items-center justify-between gap-4">
           <div>
@@ -576,22 +580,22 @@ onDestroy(() => {
 
         </div>
 
-      <div class="space-y-2">
-        <div class="mb-1 grid grid-cols-3 gap-5 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          <span class="text-center">Original</span><span class="text-center">Surcharge</span><span class="text-center">OO Price</span>
+      <div class="space-y-3">
+        <div class="grid grid-cols-3 gap-5 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <span class="text-center">Original</span><span class="text-center">OO Price</span><span class="text-center">Embedded Item Fee</span>
         </div>
-        {#each calculatedItems as item, index}
-          <div class="grid grid-cols-3 items-center gap-5 rounded-lg bg-slate-50 px-3 py-2 font-mono text-[15px] text-slate-900">
-            <span class="text-center" data-testid={index === 0 ? 'oo-original-price' : `oo-original-price-${index + 1}`}>{formatTwoDecimals(item.original)}</span>
-            <span class="text-center" data-testid={index === 0 ? 'oo-surcharge-amount' : `oo-surcharge-amount-${index + 1}`}>{formatTwoDecimals(item.surcharge)}</span>
-            <span class="text-center font-semibold" data-testid={index === 0 ? 'oo-item-price' : `oo-item-price-${index + 1}`}>{formatTwoDecimals(item.ooPrice)}</span>
-          </div>
-        {:else}
-          <div class="grid grid-cols-3 rounded-lg bg-slate-50 px-3 py-2 text-xs"><span class="text-center">—</span><span class="text-center">—</span><span class="text-center" data-testid="oo-item-price">—</span></div>
-        {/each}
-        <span class="sr-only" data-testid="oo-surcharge">{hasCalculated ? `${formatTwoDecimals(parseAmount(surchargeRate))}%` : '—'}</span>
+        <div class="min-h-10 space-y-2">
+          {#each calculatedItems as item, index}
+            <div class="grid grid-cols-3 items-center gap-5 rounded-lg bg-slate-50 px-3 py-2 font-mono text-[15px] text-slate-900">
+              <span class="text-center" data-testid={index === 0 ? 'oo-original-price' : `oo-original-price-${index + 1}`}>{formatTwoDecimals(item.original)}</span>
+              <span class="text-center font-semibold" data-testid={index === 0 ? 'oo-item-price' : `oo-item-price-${index + 1}`}>{formatTwoDecimals(item.ooPrice)}</span>
+              <span class="text-center" data-testid={index === 0 ? 'oo-surcharge-amount' : `oo-surcharge-amount-${index + 1}`}>{formatTwoDecimals(item.surcharge)}</span>
+            </div>
+          {/each}
+        </div>
+        <span class="sr-only" data-testid="oo-surcharge">{hasCalculated ? `${formatTwoDecimals(parseAmount(surchargeRate))}%` : ''}</span>
 
-        <p class="text-sm text-slate-500">The surcharge is included in the displayed item price.</p>
+        <p class="text-sm text-slate-500">The embedded item fee is included in the displayed item price.</p>
       </div>
     </section>
 
@@ -611,24 +615,24 @@ onDestroy(() => {
               <span class="text-sm font-medium text-slate-600">Item {index + 1}</span>
               <span class="text-right text-[15px] font-medium text-slate-950" data-testid={index === 0 ? 'cart-item-price' : `cart-item-price-${index + 1}`}>{formatTwoDecimals(item.ooPrice)}</span>
             </div>
-          {:else}
-            <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]"><span class="text-sm font-medium text-slate-600">Item 1</span><span class="text-right text-sm font-semibold text-slate-950" data-testid="cart-item-price">—</span></div>
           {/each}
         </div>
 
-        <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Current Service Fee</span>
-          <span class="text-right text-[15px] font-medium text-slate-950" data-testid="cart-service-fee">{displayValue(currentServiceFeeAmount)}</span>
-        </div>
+        {#if currentServiceFeeAmount !== null && currentServiceFeeAmount > 0}
+          <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
+            <span class="text-sm font-medium text-slate-600">Current Platform Fee</span>
+            <span class="text-right text-[15px] font-medium text-slate-950" data-testid="cart-service-fee">{displayValue(currentServiceFeeAmount)}</span>
+          </div>
+        {/if}
 
         <div class="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]">
           <span class="text-sm font-semibold text-slate-900">Expected Cart Total</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="cart-total">{displayValue(cartTotal)}</span>
+          <span class="text-right text-lg font-semibold text-slate-950" data-testid="cart-total">{hasCalculated ? displayValue(cartTotal) : ''}</span>
         </div>
       </div>
     </section>
 
-      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
+      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)] md:col-span-2 lg:col-span-1">
         <div class="mb-6 flex items-center justify-between gap-4">
           <div>
         
@@ -644,32 +648,18 @@ onDestroy(() => {
               <span class="text-sm font-medium text-slate-600">Item {index + 1}</span>
               <span class="text-right text-[15px] font-medium text-slate-950" data-testid={index === 0 ? 'dpos-original-price' : `dpos-original-price-${index + 1}`}>{formatTwoDecimals(item.original)}</span>
             </div>
-          {:else}
-            <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]"><span class="text-sm font-medium text-slate-600">Item 1</span><span class="text-right text-sm font-semibold text-slate-950" data-testid="dpos-original-price">—</span></div>
           {/each}
         </div>
 
-        <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Surcharge Transferred to Service Fee</span>
-          <span class="text-right text-[15px] font-medium text-slate-950" data-testid="dpos-transfer-fee">{displayValue(surchargeAmount)}</span>
-        </div>
-
-        <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-medium text-slate-600">Current Service Fee</span>
-          <span class="text-right text-[15px] font-medium text-slate-950" data-testid="dpos-current-fee">{displayValue(currentServiceFeeAmount)}</span>
+        <div class="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]">
+          <span class="text-sm font-semibold text-slate-900">Platform Fee</span>
+          <span class="text-right text-lg font-semibold text-slate-950" data-testid="dpos-service-fee">{hasCalculated ? displayValue(expectedDposServiceFee) : ''}</span>
         </div>
 
         <div class="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-semibold text-slate-900">Expected DPOS Service Fee</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="dpos-service-fee">{displayValue(expectedDposServiceFee)}</span>
+          <span class="text-sm font-semibold text-slate-900">Total</span>
+          <span class="text-right text-lg font-semibold text-slate-950" data-testid="dpos-total">{hasCalculated ? displayValue(expectedDposTotal) : ''}</span>
         </div>
-
-        <div class="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]">
-          <span class="text-sm font-semibold text-slate-900">Expected DPOS Total</span>
-          <span class="text-right text-lg font-semibold text-slate-950" data-testid="dpos-total">{displayValue(expectedDposTotal)}</span>
-        </div>
-
-        <p class="text-sm text-slate-500">The original item price is preserved, while the item surcharge is added to the Service Fee.</p>
       </div>
     </section>
     </div>
