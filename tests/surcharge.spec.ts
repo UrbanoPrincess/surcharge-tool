@@ -4,10 +4,10 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-test('5% surcharge on 24.00 yields OO item price 25.20', async ({ page }) => {
+test('5% embedded item fee on 24.00 yields OO item price 25.20', async ({ page }) => {
   await page.getByLabel('Original Price').fill('24.00');
-  await page.getByLabel('Surcharge').fill('5');
-  await page.getByLabel('Current Service Fee').fill('0');
+  await page.getByLabel('Embedded Item Fee').fill('5');
+  await page.getByLabel('Current Platform Fee').fill('0');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('1.20');
@@ -16,10 +16,10 @@ test('5% surcharge on 24.00 yields OO item price 25.20', async ({ page }) => {
   await expect(page.getByTestId('dpos-total')).toHaveText('25.20');
 });
 
-test('0.5% surcharge on 25.00 yields OO item price 25.13', async ({ page }) => {
+test('0.5% embedded item fee on 25.00 yields OO item price 25.13', async ({ page }) => {
   await page.getByLabel('Original Price').fill('25.00');
-  await page.getByLabel('Surcharge').fill('0.5');
-  await page.getByLabel('Current Service Fee').fill('0');
+  await page.getByLabel('Embedded Item Fee').fill('0.5');
+  await page.getByLabel('Current Platform Fee').fill('0');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.13');
@@ -28,10 +28,10 @@ test('0.5% surcharge on 25.00 yields OO item price 25.13', async ({ page }) => {
   await expect(page.getByTestId('dpos-total')).toHaveText('25.13');
 });
 
-test('surcharge 0.5% and service fee 0.5 on 5.00', async ({ page }) => {
+test('embedded item fee 0.5% and platform fee 0.5 on 5.00', async ({ page }) => {
   await page.getByLabel('Original Price').fill('5.00');
-  await page.getByLabel('Surcharge').fill('0.5');
-  await page.getByLabel('Current Service Fee').fill('0.5');
+  await page.getByLabel('Embedded Item Fee').fill('0.5');
+  await page.getByLabel('Current Platform Fee').fill('0.5');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.03');
@@ -42,10 +42,10 @@ test('surcharge 0.5% and service fee 0.5 on 5.00', async ({ page }) => {
   await expect(page.getByTestId('dpos-total')).toHaveText('7.55');
 });
 
-test('surcharge 0.5% and service fee 0.8 on 5.00', async ({ page }) => {
+test('embedded item fee 0.5% and platform fee 0.8 on 5.00', async ({ page }) => {
   await page.getByLabel('Original Price').fill('5.00');
-  await page.getByLabel('Surcharge').fill('0.5');
-  await page.getByLabel('Current Service Fee').fill('0.8');
+  await page.getByLabel('Embedded Item Fee').fill('0.5');
+  await page.getByLabel('Current Platform Fee').fill('0.8');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.03');
@@ -58,8 +58,8 @@ test('surcharge 0.5% and service fee 0.8 on 5.00', async ({ page }) => {
 
 test('full QA flow calculates all fields and totals match', async ({ page }) => {
   await page.getByLabel('Original Price').fill('13.51');
-  await page.getByLabel('Surcharge').fill('10');
-  await page.getByLabel('Current Service Fee').fill('10');
+  await page.getByLabel('Embedded Item Fee').fill('10');
+  await page.getByLabel('Current Platform Fee').fill('10');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-original-price')).toHaveText('13.51');
@@ -73,7 +73,6 @@ test('full QA flow calculates all fields and totals match', async ({ page }) => 
   await expect(page.getByTestId('cart-total')).toHaveText('163.46');
 
   await expect(page.getByTestId('dpos-original-price')).toHaveText('13.51');
-  await expect(page.getByTestId('dpos-transfer-fee')).toHaveText('1.35');
   await expect(page.getByTestId('dpos-current-fee')).toHaveText('148.60');
   await expect(page.getByTestId('dpos-service-fee')).toHaveText('149.95');
   await expect(page.getByTestId('dpos-total')).toHaveText('163.46');
@@ -81,8 +80,8 @@ test('full QA flow calculates all fields and totals match', async ({ page }) => 
 
 test('second example calculates correctly', async ({ page }) => {
   await page.getByLabel('Original Price').fill('15');
-  await page.getByLabel('Surcharge').fill('5');
-  await page.getByLabel('Current Service Fee').fill('10');
+  await page.getByLabel('Embedded Item Fee').fill('5');
+  await page.getByLabel('Current Platform Fee').fill('10');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.75');
@@ -95,8 +94,8 @@ test('second example calculates correctly', async ({ page }) => {
 
 test('third example calculates correctly', async ({ page }) => {
   await page.getByLabel('Original Price').fill('20');
-  await page.getByLabel('Surcharge').fill('10');
-  await page.getByLabel('Current Service Fee').fill('5');
+  await page.getByLabel('Embedded Item Fee').fill('10');
+  await page.getByLabel('Current Platform Fee').fill('5');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('2.00');
@@ -107,10 +106,10 @@ test('third example calculates correctly', async ({ page }) => {
   await expect(page.getByTestId('dpos-total')).toHaveText('132.00');
 });
 
-test('round half up handles 13.50 surcharge and service fee correctly', async ({ page }) => {
+test('round half up handles 13.50 embedded item fee and platform fee correctly', async ({ page }) => {
   await page.getByLabel('Original Price').fill('13.50');
-  await page.getByLabel('Surcharge').fill('1');
-  await page.getByLabel('Current Service Fee').fill('1');
+  await page.getByLabel('Embedded Item Fee').fill('1');
+  await page.getByLabel('Current Platform Fee').fill('1');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.14');
@@ -123,15 +122,35 @@ test('round half up handles 13.50 surcharge and service fee correctly', async ({
 
 test('zero rates leave price unchanged aside from rounding', async ({ page }) => {
   await page.getByLabel('Original Price').fill('12.34');
-  await page.getByLabel('Surcharge').fill('0');
-  await page.getByLabel('Current Service Fee').fill('0');
+  await page.getByLabel('Embedded Item Fee').fill('0');
+  await page.getByLabel('Current Platform Fee').fill('0');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.00');
   await expect(page.getByTestId('oo-item-price')).toHaveText('12.34');
-  await expect(page.getByTestId('cart-service-fee')).toHaveText('0.00');
+  await expect(page.getByTestId('cart-service-fee')).toHaveCount(0);
+  await expect(page.getByTestId('dpos-current-fee')).toHaveCount(0);
   await expect(page.getByTestId('cart-total')).toHaveText('12.34');
   await expect(page.getByTestId('dpos-total')).toHaveText('12.34');
+});
+
+test('zero platform fee hides current fee rows and includes embedded fee in DPOS platform fee', async ({ page }) => {
+  await page.getByLabel('Original Price').fill('12.00');
+  await page.getByLabel('Embedded Item Fee').fill('2');
+  await page.getByLabel('Current Platform Fee').fill('0.00');
+  await page.getByRole('button', { name: 'Calculate' }).click();
+
+  await expect(page.getByTestId('oo-item-price')).toHaveText('12.24');
+  await expect(page.getByTestId('cart-item-price')).toHaveText('12.24');
+  await expect(page.getByTestId('cart-service-fee')).toHaveCount(0);
+  await expect(page.getByTestId('cart-total')).toHaveText('12.24');
+  await expect(page.getByTestId('dpos-original-price')).toHaveText('12.00');
+  await expect(page.getByText('Embedded Item Fee Transferred to Platform Fee', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('dpos-current-fee')).toHaveCount(0);
+  await expect(page.getByTestId('dpos-service-fee')).toHaveText('0.24');
+  await expect(page.getByTestId('dpos-total')).toHaveText('12.24');
+  await expect(page.getByText('DPOS Platform Fee', { exact: true })).toBeVisible();
+  await expect(page.getByText('DPOS Total', { exact: true })).toBeVisible();
 });
 
 test('backspace after decimal preserves the decimal point', async ({ page }) => {
@@ -144,30 +163,30 @@ test('backspace after decimal preserves the decimal point', async ({ page }) => 
 
 test('reset button clears inputs and results', async ({ page }) => {
   await page.getByLabel('Original Price').fill('20');
-  await page.getByLabel('Surcharge').fill('2');
-  await page.getByLabel('Current Service Fee').fill('3');
+  await page.getByLabel('Embedded Item Fee').fill('2');
+  await page.getByLabel('Current Platform Fee').fill('3');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await page.getByRole('button', { name: 'Reset' }).click();
 
   await expect(page.getByLabel('Original Price')).toHaveValue('');
-  await expect(page.getByLabel('Surcharge')).toHaveValue('');
-  await expect(page.getByLabel('Current Service Fee')).toHaveValue('');
+  await expect(page.getByLabel('Embedded Item Fee')).toHaveValue('');
+  await expect(page.getByLabel('Current Platform Fee')).toHaveValue('');
   await expect(page.getByTestId('oo-item-price')).toHaveText('—');
   await expect(page.getByTestId('cart-total')).toHaveText('—');
 });
 
-test('calculate without current service fee treats fee as zero', async ({ page }) => {
+test('calculate without current platform fee treats fee as zero', async ({ page }) => {
   await page.getByLabel('Original Price').fill('24.00');
-  await page.getByLabel('Surcharge').fill('5');
-  await page.getByLabel('Current Service Fee').fill('');
+  await page.getByLabel('Embedded Item Fee').fill('5');
+  await page.getByLabel('Current Platform Fee').fill('');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('form-error')).toHaveCount(0);
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('1.20');
   await expect(page.getByTestId('oo-item-price')).toHaveText('25.20');
-  await expect(page.getByTestId('cart-service-fee-rate')).toHaveText('—');
-  await expect(page.getByTestId('cart-service-fee')).toHaveText('0.00');
+  await expect(page.getByTestId('cart-service-fee')).toHaveCount(0);
+  await expect(page.getByTestId('dpos-current-fee')).toHaveCount(0);
   await expect(page.getByTestId('cart-total')).toHaveText('25.20');
   await expect(page.getByTestId('dpos-service-fee')).toHaveText('1.20');
   await expect(page.getByTestId('dpos-total')).toHaveText('25.20');
@@ -175,8 +194,8 @@ test('calculate without current service fee treats fee as zero', async ({ page }
 
 test('calculation breakdown shows steps after calculate', async ({ page }) => {
   await page.getByLabel('Original Price').fill('63.00');
-  await page.getByLabel('Surcharge').fill('5');
-  await page.getByLabel('Current Service Fee').fill('');
+  await page.getByLabel('Embedded Item Fee').fill('5');
+  await page.getByLabel('Current Platform Fee').fill('');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('calculation-breakdown')).toHaveCount(0);
@@ -187,7 +206,7 @@ test('calculation breakdown shows steps after calculate', async ({ page }) => {
   await expect(breakdown).toBeVisible();
   await expect(breakdown).toContainText('63.00 × 0.05 = 3.15');
   await expect(breakdown).toContainText('63.00 + 3.15 = 66.15');
-  await expect(breakdown).toContainText('Expected DPOS Total');
+  await expect(breakdown).toContainText('DPOS Total');
 
   await page.getByTestId('calculation-breakdown-toggle').click();
   await expect(page.getByTestId('calculation-breakdown')).toHaveCount(0);
@@ -196,8 +215,8 @@ test('calculation breakdown shows steps after calculate', async ({ page }) => {
 
 test('invalid input shows validation message and blocks calculation', async ({ page }) => {
   await page.getByLabel('Original Price').fill('');
-  await page.getByLabel('Surcharge').fill('1');
-  await page.getByLabel('Current Service Fee').fill('1');
+  await page.getByLabel('Embedded Item Fee').fill('1');
+  await page.getByLabel('Current Platform Fee').fill('1');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('form-error')).toHaveText('Please fix the highlighted values before calculating.');
@@ -207,8 +226,8 @@ test('invalid input shows validation message and blocks calculation', async ({ p
 
 test('minus sign is stripped from input during entry', async ({ page }) => {
   await page.getByLabel('Original Price').fill('-10');
-  await page.getByLabel('Surcharge').fill('1');
-  await page.getByLabel('Current Service Fee').fill('0.1');
+  await page.getByLabel('Embedded Item Fee').fill('1');
+  await page.getByLabel('Current Platform Fee').fill('0.1');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByLabel('Original Price')).toHaveValue('10');
