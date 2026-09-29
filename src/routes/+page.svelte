@@ -48,6 +48,10 @@
   let totalsMatch = false;
   let showCalculationBreakdown = false;
   let showItems = false;
+  let isPlatformFeeTooltipVisible = false;
+  let isEmbeddedItemFeeTooltipVisible = false;
+  let embeddedItemFeeField: HTMLDivElement;
+  let platformFeeField: HTMLDivElement;
   let itemInputs: HTMLInputElement[] = [];
   let itemsPopover: HTMLDivElement;
   let itemsTrigger: HTMLButtonElement;
@@ -56,6 +60,32 @@
     const target = event.target as Node;
     if (!itemsPopover?.contains(target) && !itemsTrigger?.contains(target)) {
       showItems = false;
+    }
+    if (!embeddedItemFeeField?.contains(target)) isEmbeddedItemFeeTooltipVisible = false;
+    if (!platformFeeField?.contains(target)) isPlatformFeeTooltipVisible = false;
+  };
+
+  const openPlatformFeeTooltip = () => {
+    isPlatformFeeTooltipVisible = true;
+    isEmbeddedItemFeeTooltipVisible = false;
+  };
+
+  const openEmbeddedItemFeeTooltip = () => {
+    isEmbeddedItemFeeTooltipVisible = true;
+    isPlatformFeeTooltipVisible = false;
+  };
+
+  const closePlatformFeeTooltipOnLeave = (event: MouseEvent) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (!nextTarget || !platformFeeField?.contains(nextTarget)) {
+      isPlatformFeeTooltipVisible = false;
+    }
+  };
+
+  const closeEmbeddedItemFeeTooltipOnLeave = (event: MouseEvent) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (!nextTarget || !embeddedItemFeeField?.contains(nextTarget)) {
+      isEmbeddedItemFeeTooltipVisible = false;
     }
   };
 
@@ -153,6 +183,8 @@
     if (field === 'surchargeRate') surchargeRate = sanitized;
     if (field === 'currentServiceFeeRate') currentServiceFeeRate = sanitized;
 
+    isPlatformFeeTooltipVisible = false;
+    isEmbeddedItemFeeTooltipVisible = false;
     validationErrors[field] = '';
     formError = '';
   };
@@ -175,6 +207,16 @@
   };
 
   const parseOptionalAmount = (value: string) => (value.trim() === '' ? 0 : parseAmount(value));
+  const hasEmbeddedItemFee = () => parseOptionalAmount(surchargeRate) > 0;
+  const hasPlatformFee = () => parseOptionalAmount(currentServiceFeeRate) > 0;
+
+  const hasExactlyOneFee = () => hasEmbeddedItemFee() !== hasPlatformFee();
+
+  const canCalculate = () =>
+    isValidDecimal(items[0].price, MAX_PRICE) &&
+    isValidOptionalDecimal(surchargeRate, MAX_SURCHARGE_PERCENTAGE) &&
+    isValidOptionalDecimal(currentServiceFeeRate, MAX_SERVICE_FEE_RATE) &&
+    hasExactlyOneFee();
 
   const validateFields = () => {
     let valid = true;
@@ -191,13 +233,17 @@
         : 'Enter a valid non-negative price with up to 2 decimals.',
     }));
 
-    if (!isValidDecimal(surchargeRate, MAX_SURCHARGE_PERCENTAGE)) {
+    if (!isValidOptionalDecimal(surchargeRate, MAX_SURCHARGE_PERCENTAGE)) {
       validationErrors.surchargeRate = 'Enter a valid non-negative embedded item fee with up to 2 decimals.';
       valid = false;
     }
 
     if (!isValidOptionalDecimal(currentServiceFeeRate, MAX_SERVICE_FEE_RATE)) {
       validationErrors.currentServiceFeeRate = 'Enter a valid non-negative platform fee with up to 2 decimals.';
+      valid = false;
+    }
+
+    if (!hasExactlyOneFee()) {
       valid = false;
     }
 
@@ -266,7 +312,7 @@
       return;
     }
 
-    const surchargeRateValue = parseAmount(surchargeRate);
+    const surchargeRateValue = parseOptionalAmount(surchargeRate);
     const currentServiceFeeRateValue = parseOptionalAmount(currentServiceFeeRate);
 
     const validItems = items
@@ -419,7 +465,7 @@ onDestroy(() => {
 
         <label class="min-w-0 space-y-3">
           <span class="block text-sm font-semibold text-slate-800">Embedded Item Fee</span>
-          <div class="relative">
+          <div class="relative" bind:this={embeddedItemFeeField}>
             <input
               type="text"
               inputmode="decimal"
@@ -428,15 +474,37 @@ onDestroy(() => {
               aria-label="Embedded Item Fee"
               aria-invalid={validationErrors.surchargeRate ? 'true' : 'false'}
               data-testid="surcharge"
+              disabled={hasPlatformFee()}
               value={surchargeRate}
               on:input={(event) => handleInput('surchargeRate', event.currentTarget.value)}
-              class="w-full rounded-xl border px-4 py-3 pr-14 text-base font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.surchargeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
+              class="w-full rounded-xl border px-4 py-3 pr-14 text-base font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:opacity-75 {validationErrors.surchargeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
               on:keydown={allowInputKey}
               on:paste={handlePaste}
             />
             <span class="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-semibold text-slate-500">%</span>
+            {#if hasPlatformFee()}
+              <button
+                type="button"
+                aria-label="Why is Embedded Item Fee unavailable?"
+                aria-expanded={isEmbeddedItemFeeTooltipVisible}
+                aria-describedby={isEmbeddedItemFeeTooltipVisible ? 'embedded-item-fee-tooltip' : undefined}
+                data-testid="embedded-item-fee-disabled-trigger"
+                on:mouseenter={openEmbeddedItemFeeTooltip}
+                on:mouseleave={closeEmbeddedItemFeeTooltipOnLeave}
+                on:focus={openEmbeddedItemFeeTooltip}
+                on:blur={() => (isEmbeddedItemFeeTooltipVisible = false)}
+                on:click={openEmbeddedItemFeeTooltip}
+                on:keydown={(event) => event.key === 'Escape' && (isEmbeddedItemFeeTooltipVisible = false)}
+                class="absolute inset-0 z-10 cursor-not-allowed rounded-xl bg-transparent"
+              ></button>
+              {#if isEmbeddedItemFeeTooltipVisible}
+                <span id="embedded-item-fee-tooltip" role="tooltip" class="absolute left-0 top-full z-20 mt-2 w-max max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg" on:mouseleave={closeEmbeddedItemFeeTooltipOnLeave}>
+                  Clear the Platform Fee to use Embedded Item Fee.
+                </span>
+              {/if}
+            {/if}
           </div>
-          <p class="text-xs text-slate-500">Enter percentage (e.g., 1% = 0.01).</p>
+          <p class="text-xs text-slate-500">Added to each item price.</p>
           {#if validationErrors.surchargeRate}
             <p class="text-sm text-rose-600">{validationErrors.surchargeRate}</p>
           {/if}
@@ -444,21 +512,45 @@ onDestroy(() => {
 
         <label class="min-w-0 space-y-3">
           <span class="block text-sm font-semibold text-slate-800">Current Platform Fee</span>
-          <input
-            type="text"
-            inputmode="decimal"
-            autocomplete="off"
-            placeholder="0.1"
-            aria-label="Current Platform Fee"
-            aria-invalid={validationErrors.currentServiceFeeRate ? 'true' : 'false'}
-            data-testid="current-service-fee"
-            value={currentServiceFeeRate}
-            on:input={(event) => handleInput('currentServiceFeeRate', event.currentTarget.value)}
-            on:keydown={allowInputKey}
-            on:paste={handlePaste}
-            class="w-full rounded-xl border px-4 py-3 text-base font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 {validationErrors.currentServiceFeeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
-          />
-          <p class="text-xs text-slate-500">Platform fee rate applied to the cart.</p>
+          <div class="relative" bind:this={platformFeeField}>
+            <input
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="0.1"
+              aria-label="Current Platform Fee"
+              aria-invalid={validationErrors.currentServiceFeeRate ? 'true' : 'false'}
+              data-testid="current-service-fee"
+              disabled={hasEmbeddedItemFee()}
+              value={currentServiceFeeRate}
+              on:input={(event) => handleInput('currentServiceFeeRate', event.currentTarget.value)}
+              on:keydown={allowInputKey}
+              on:paste={handlePaste}
+              class="w-full rounded-xl border px-4 py-3 text-base font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:opacity-75 {validationErrors.currentServiceFeeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}"
+            />
+            {#if hasEmbeddedItemFee()}
+              <button
+                type="button"
+                aria-label="Why is Platform Fee unavailable?"
+                aria-expanded={isPlatformFeeTooltipVisible}
+                aria-describedby={isPlatformFeeTooltipVisible ? 'platform-fee-tooltip' : undefined}
+                data-testid="platform-fee-disabled-trigger"
+                on:mouseenter={openPlatformFeeTooltip}
+                on:mouseleave={closePlatformFeeTooltipOnLeave}
+                on:focus={openPlatformFeeTooltip}
+                on:blur={() => (isPlatformFeeTooltipVisible = false)}
+                on:click={openPlatformFeeTooltip}
+                on:keydown={(event) => event.key === 'Escape' && (isPlatformFeeTooltipVisible = false)}
+                class="absolute inset-0 z-10 cursor-not-allowed rounded-xl bg-transparent"
+              ></button>
+              {#if isPlatformFeeTooltipVisible}
+                <span id="platform-fee-tooltip" role="tooltip" class="absolute left-0 top-full z-20 mt-2 w-max max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg" on:mouseleave={closePlatformFeeTooltipOnLeave}>
+                  Clear the Embedded Item Fee to use Platform Fee.
+                </span>
+              {/if}
+            {/if}
+          </div>
+          <p class="text-xs text-slate-500">Additional fee applied per transaction.</p>
           {#if validationErrors.currentServiceFeeRate}
             <p class="text-sm text-rose-600">{validationErrors.currentServiceFeeRate}</p>
           {/if}
@@ -476,7 +568,7 @@ onDestroy(() => {
         <button
           type="button"
           on:click={calculate}
-          disabled={!isValidDecimal(items[0].price, MAX_PRICE) || !isValidDecimal(surchargeRate, MAX_SURCHARGE_PERCENTAGE)}
+          disabled={!canCalculate()}
           class="inline-flex justify-center rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Calculate
@@ -595,7 +687,7 @@ onDestroy(() => {
         </div>
         <span class="sr-only" data-testid="oo-surcharge">{hasCalculated ? `${formatTwoDecimals(parseAmount(surchargeRate))}%` : ''}</span>
 
-        <p class="text-sm text-slate-500">The embedded item fee is included in the displayed item price.</p>
+ <p class="text-sm text-slate-500">The embedded item fee is included in the displayed item price.</p>
       </div>
     </section>
 
