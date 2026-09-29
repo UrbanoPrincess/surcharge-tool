@@ -26,7 +26,6 @@ test('result sections remain blank before calculation', async ({ page }) => {
 test('5% embedded item fee on 24.00 yields OO item price 25.20', async ({ page }) => {
   await page.getByLabel('Original Price').fill('24.00');
   await page.getByLabel('Embedded Item Fee').fill('5');
-  await page.getByLabel('Current Platform Fee').fill('0');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('1.20');
@@ -46,7 +45,6 @@ test('5% embedded item fee on 24.00 yields OO item price 25.20', async ({ page }
 test('0.5% embedded item fee on 25.00 yields OO item price 25.13', async ({ page }) => {
   await page.getByLabel('Original Price').fill('25.00');
   await page.getByLabel('Embedded Item Fee').fill('0.5');
-  await page.getByLabel('Current Platform Fee').fill('0');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.13');
@@ -55,38 +53,37 @@ test('0.5% embedded item fee on 25.00 yields OO item price 25.13', async ({ page
   await expect(page.getByTestId('dpos-total')).toHaveText('25.13');
 });
 
-test('embedded item fee 0.5% and platform fee 0.5 on 5.00', async ({ page }) => {
+test('platform fee 0.5 on 5.00 calculates without an embedded item fee', async ({ page }) => {
   await page.getByLabel('Original Price').fill('5.00');
-  await page.getByLabel('Embedded Item Fee').fill('0.5');
+  await page.getByLabel('Embedded Item Fee').fill('0');
   await page.getByLabel('Current Platform Fee').fill('0.5');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
-  await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.03');
-  await expect(page.getByTestId('oo-item-price')).toHaveText('5.03');
-  await expect(page.getByTestId('cart-service-fee')).toHaveText('2.52');
-  await expect(page.getByTestId('cart-total')).toHaveText('7.55');
-  await expect(page.getByTestId('dpos-service-fee')).toHaveText('2.55');
-  await expect(page.getByTestId('dpos-total')).toHaveText('7.55');
+  await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.00');
+  await expect(page.getByTestId('oo-item-price')).toHaveText('5.00');
+  await expect(page.getByTestId('cart-service-fee')).toHaveText('2.50');
+  await expect(page.getByTestId('cart-total')).toHaveText('7.50');
+  await expect(page.getByTestId('dpos-service-fee')).toHaveText('2.50');
+  await expect(page.getByTestId('dpos-total')).toHaveText('7.50');
 });
 
-test('embedded item fee 0.5% and platform fee 0.8 on 5.00', async ({ page }) => {
+test('platform fee 0.8 on 5.00 calculates without an embedded item fee', async ({ page }) => {
   await page.getByLabel('Original Price').fill('5.00');
-  await page.getByLabel('Embedded Item Fee').fill('0.5');
+  await page.getByLabel('Embedded Item Fee').fill('');
   await page.getByLabel('Current Platform Fee').fill('0.8');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
-  await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.03');
-  await expect(page.getByTestId('oo-item-price')).toHaveText('5.03');
-  await expect(page.getByTestId('cart-service-fee')).toHaveText('4.02');
-  await expect(page.getByTestId('cart-total')).toHaveText('9.05');
-  await expect(page.getByTestId('dpos-service-fee')).toHaveText('4.05');
-  await expect(page.getByTestId('dpos-total')).toHaveText('9.05');
+  await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.00');
+  await expect(page.getByTestId('oo-item-price')).toHaveText('5.00');
+  await expect(page.getByTestId('cart-service-fee')).toHaveText('4.00');
+  await expect(page.getByTestId('cart-total')).toHaveText('9.00');
+  await expect(page.getByTestId('dpos-service-fee')).toHaveText('4.00');
+  await expect(page.getByTestId('dpos-total')).toHaveText('9.00');
 });
 
 test('full QA flow calculates all fields and totals match', async ({ page }) => {
   await page.getByLabel('Original Price').fill('13.51');
   await page.getByLabel('Embedded Item Fee').fill('10');
-  await page.getByLabel('Current Platform Fee').fill('10');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-original-price')).toHaveText('13.51');
@@ -95,74 +92,72 @@ test('full QA flow calculates all fields and totals match', async ({ page }) => 
   await expect(page.getByTestId('oo-item-price')).toHaveText('14.86');
 
   await expect(page.getByTestId('cart-item-price')).toHaveText('14.86');
-  await expect(page.getByTestId('cart-service-fee')).toHaveText('148.60');
-  await expect(page.getByTestId('cart-total')).toHaveText('163.46');
+  await expect(page.getByTestId('cart-service-fee')).toHaveCount(0);
+  await expect(page.getByTestId('cart-total')).toHaveText('14.86');
 
   await expect(page.getByTestId('dpos-original-price')).toHaveText('13.51');
-  await expect(page.getByTestId('dpos-current-fee')).toHaveText('148.60');
-  await expect(page.getByTestId('dpos-service-fee')).toHaveText('149.95');
-  await expect(page.getByTestId('dpos-total')).toHaveText('163.46');
+  await expect(page.getByTestId('dpos-current-fee')).toHaveCount(0);
+  await expect(page.getByTestId('dpos-service-fee')).toHaveText('1.35');
+  await expect(page.getByTestId('dpos-total')).toHaveText('14.86');
 });
 
 test('second example calculates correctly', async ({ page }) => {
   await page.getByLabel('Original Price').fill('15');
-  await page.getByLabel('Embedded Item Fee').fill('5');
+  await page.getByLabel('Embedded Item Fee').fill('0');
   await page.getByLabel('Current Platform Fee').fill('10');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
-  await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.75');
-  await expect(page.getByTestId('oo-item-price')).toHaveText('15.75');
-  await expect(page.getByTestId('cart-service-fee')).toHaveText('157.50');
-  await expect(page.getByTestId('cart-total')).toHaveText('173.25');
-  await expect(page.getByTestId('dpos-service-fee')).toHaveText('158.25');
-  await expect(page.getByTestId('dpos-total')).toHaveText('173.25');
+  await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.00');
+  await expect(page.getByTestId('oo-item-price')).toHaveText('15.00');
+  await expect(page.getByTestId('cart-service-fee')).toHaveText('150.00');
+  await expect(page.getByTestId('cart-total')).toHaveText('165.00');
+  await expect(page.getByTestId('dpos-service-fee')).toHaveText('150.00');
+  await expect(page.getByTestId('dpos-total')).toHaveText('165.00');
 });
 
 test('third example calculates correctly', async ({ page }) => {
   await page.getByLabel('Original Price').fill('20');
   await page.getByLabel('Embedded Item Fee').fill('10');
-  await page.getByLabel('Current Platform Fee').fill('5');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('2.00');
   await expect(page.getByTestId('oo-item-price')).toHaveText('22.00');
-  await expect(page.getByTestId('cart-service-fee')).toHaveText('110.00');
-  await expect(page.getByTestId('cart-total')).toHaveText('132.00');
-  await expect(page.getByTestId('dpos-service-fee')).toHaveText('112.00');
-  await expect(page.getByTestId('dpos-total')).toHaveText('132.00');
+  await expect(page.getByTestId('cart-service-fee')).toHaveCount(0);
+  await expect(page.getByTestId('cart-total')).toHaveText('22.00');
+  await expect(page.getByTestId('dpos-service-fee')).toHaveText('2.00');
+  await expect(page.getByTestId('dpos-total')).toHaveText('22.00');
 });
 
 test('round half up handles 13.50 embedded item fee and platform fee correctly', async ({ page }) => {
   await page.getByLabel('Original Price').fill('13.50');
   await page.getByLabel('Embedded Item Fee').fill('1');
-  await page.getByLabel('Current Platform Fee').fill('1');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.14');
   await expect(page.getByTestId('oo-item-price')).toHaveText('13.64');
-  await expect(page.getByTestId('cart-service-fee')).toHaveText('13.64');
-  await expect(page.getByTestId('cart-total')).toHaveText('27.28');
-  await expect(page.getByTestId('dpos-service-fee')).toHaveText('13.78');
-  await expect(page.getByTestId('dpos-total')).toHaveText('27.28');
+  await expect(page.getByTestId('cart-service-fee')).toHaveCount(0);
+  await expect(page.getByTestId('cart-total')).toHaveText('13.64');
+  await expect(page.getByTestId('dpos-service-fee')).toHaveText('0.14');
+  await expect(page.getByTestId('dpos-total')).toHaveText('13.64');
 });
 
-test('zero rates leave price unchanged aside from rounding', async ({ page }) => {
+test('zero embedded item fee allows a platform fee calculation', async ({ page }) => {
   await page.getByLabel('Original Price').fill('12.34');
   await page.getByLabel('Embedded Item Fee').fill('0');
-  await page.getByLabel('Current Platform Fee').fill('0');
+  await page.getByLabel('Current Platform Fee').fill('0.1');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-surcharge-amount')).toHaveText('0.00');
   await expect(page.getByTestId('oo-item-price')).toHaveText('12.34');
-  await expect(page.getByTestId('cart-service-fee')).toHaveCount(0);
-  await expect(page.getByTestId('cart-total')).toHaveText('12.34');
-  await expect(page.getByTestId('dpos-total')).toHaveText('12.34');
+  await expect(page.getByTestId('cart-service-fee')).toHaveText('1.23');
+  await expect(page.getByTestId('cart-total')).toHaveText('13.57');
+  await expect(page.getByTestId('dpos-service-fee')).toHaveText('1.23');
+  await expect(page.getByTestId('dpos-total')).toHaveText('13.57');
 });
 
 test('zero platform fee hides current fee rows and includes embedded fee in DPOS platform fee', async ({ page }) => {
   await page.getByLabel('Original Price').fill('12.00');
   await page.getByLabel('Embedded Item Fee').fill('2');
-  await page.getByLabel('Current Platform Fee').fill('0.00');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('oo-item-price')).toHaveText('12.24');
@@ -189,7 +184,6 @@ test('backspace after decimal preserves the decimal point', async ({ page }) => 
 test('reset button clears inputs and results', async ({ page }) => {
   await page.getByLabel('Original Price').fill('20');
   await page.getByLabel('Embedded Item Fee').fill('2');
-  await page.getByLabel('Current Platform Fee').fill('3');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await page.getByRole('button', { name: 'Reset' }).click();
@@ -204,7 +198,6 @@ test('reset button clears inputs and results', async ({ page }) => {
 test('calculate without current platform fee treats fee as zero', async ({ page }) => {
   await page.getByLabel('Original Price').fill('24.00');
   await page.getByLabel('Embedded Item Fee').fill('5');
-  await page.getByLabel('Current Platform Fee').fill('');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('form-error')).toHaveCount(0);
@@ -219,7 +212,6 @@ test('calculate without current platform fee treats fee as zero', async ({ page 
 test('calculation breakdown shows steps after calculate', async ({ page }) => {
   await page.getByLabel('Original Price').fill('63.00');
   await page.getByLabel('Embedded Item Fee').fill('5');
-  await page.getByLabel('Current Platform Fee').fill('');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByTestId('calculation-breakdown')).toHaveCount(0);
@@ -281,24 +273,79 @@ test('result cards adapt to desktop, tablet, and mobile widths', async ({ page }
   await expectNoHorizontalOverflow(390);
 });
 
-test('invalid input shows validation message and blocks calculation', async ({ page }) => {
-  await page.getByLabel('Original Price').fill('');
-  await page.getByLabel('Embedded Item Fee').fill('1');
-  await page.getByLabel('Current Platform Fee').fill('1');
-  await page.getByRole('button', { name: 'Calculate' }).click();
+test('fee selection requires exactly one configured fee', async ({ page }) => {
+  const calculateButton = page.getByRole('button', { name: 'Calculate' });
+  const noFeeMessage = page.getByText('Enter either an Embedded Item Fee or a Platform Fee.', { exact: true });
+  const embeddedItemFee = page.getByTestId('surcharge');
+  const platformFee = page.getByTestId('current-service-fee');
 
-  await expect(page.getByTestId('form-error')).toHaveText('Please fix the highlighted values before calculating.');
-  await expect(page.getByTestId('oo-item-price')).toHaveCount(0);
-  await expect(page.getByTestId('cart-total')).toHaveText('');
+  await expect(calculateButton).toBeDisabled();
+  await expect(noFeeMessage).toHaveCount(0);
+
+  await page.getByLabel('Original Price').fill('12.00');
+  await expect(calculateButton).toBeDisabled();
+  await expect(noFeeMessage).toHaveCount(0);
+
+  await embeddedItemFee.fill('2');
+  await expect(calculateButton).toBeEnabled();
+  await expect(noFeeMessage).toHaveCount(0);
+  await expect(platformFee).toBeDisabled();
+  const platformFeeTooltipTrigger = page.getByTestId('platform-fee-disabled-trigger');
+  await platformFeeTooltipTrigger.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('Clear the Embedded Item Fee to use Platform Fee.');
+  await expect(page.getByRole('tooltip')).toHaveCount(1);
+  await page.getByRole('tooltip').hover();
+  await expect(page.getByRole('tooltip')).toBeVisible();
+  await page.getByRole('heading', { name: 'Embedded Item Fee Calculator' }).hover();
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+
+  await platformFeeTooltipTrigger.focus();
+  await expect(page.getByRole('tooltip')).toHaveText('Clear the Embedded Item Fee to use Platform Fee.');
+  await platformFeeTooltipTrigger.blur();
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+
+  await platformFeeTooltipTrigger.click();
+  await expect(page.getByRole('tooltip')).toBeVisible();
+  await page.getByRole('heading', { name: 'Embedded Item Fee Calculator' }).click();
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await expect(page.getByTestId('form-error')).toHaveCount(0);
+  await expect(noFeeMessage).toHaveCount(0);
+
+  await embeddedItemFee.fill('');
+  await expect(platformFee).toBeEnabled();
+  await expect(calculateButton).toBeDisabled();
+
+  await platformFee.fill('0.1');
+  await expect(calculateButton).toBeEnabled();
+  await expect(embeddedItemFee).toBeDisabled();
+  await expect(noFeeMessage).toHaveCount(0);
+  const embeddedItemFeeTooltipTrigger = page.getByTestId('embedded-item-fee-disabled-trigger');
+  await embeddedItemFeeTooltipTrigger.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('Clear the Platform Fee to use Embedded Item Fee.');
+  await expect(page.getByRole('tooltip')).toHaveCount(1);
+  await page.getByRole('heading', { name: 'Embedded Item Fee Calculator' }).hover();
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await embeddedItemFeeTooltipTrigger.click();
+  await expect(page.getByRole('tooltip')).toBeVisible();
+  await page.getByRole('heading', { name: 'Embedded Item Fee Calculator' }).click();
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await expect(page.getByTestId('form-error')).toHaveCount(0);
+
+  await platformFee.fill('');
+  await expect(embeddedItemFee).toBeEnabled();
+
+  await embeddedItemFee.fill('0');
+  await platformFee.fill('0.00');
+  await expect(calculateButton).toBeDisabled();
+  await expect(noFeeMessage).toHaveCount(0);
 });
 
 test('minus sign is stripped from input during entry', async ({ page }) => {
   await page.getByLabel('Original Price').fill('-10');
   await page.getByLabel('Embedded Item Fee').fill('1');
-  await page.getByLabel('Current Platform Fee').fill('0.1');
   await page.getByRole('button', { name: 'Calculate' }).click();
 
   await expect(page.getByLabel('Original Price')).toHaveValue('10');
   await expect(page.getByTestId('oo-item-price')).toHaveText('10.10');
-  await expect(page.getByTestId('cart-total')).toHaveText('11.11');
+  await expect(page.getByTestId('cart-total')).toHaveText('10.10');
 });
