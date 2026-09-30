@@ -21,17 +21,33 @@
   type FieldKey =
     | 'originalPrice'
     | 'surchargeRate'
+    | 'shopEmbeddedFeeRate'
+    | 'tableEmbeddedFeeRate'
     | 'currentServiceFeeRate';
 
   type Item = { price: string; error: string };
+  type FeeFlowItem = { original: number; embeddedFee: number; ooPrice: number };
+  type FeeFlowResult = {
+    items: FeeFlowItem[];
+    embeddedFeeAmount: number;
+    ooItemPrice: number;
+    currentServiceFeeAmount: number;
+    cartTotal: number;
+    expectedDposServiceFee: number;
+    expectedDposTotal: number;
+  };
 
   let items: Item[] = [{ price: '', error: '' }];
   let surchargeRate = '';
+  let shopEmbeddedFeeRate = '';
+  let tableEmbeddedFeeRate = '';
   let currentServiceFeeRate = '';
 
   let validationErrors: Record<FieldKey, string> = {
     originalPrice: '',
     surchargeRate: '',
+    shopEmbeddedFeeRate: '',
+    tableEmbeddedFeeRate: '',
     currentServiceFeeRate: '',
   };
 
@@ -45,9 +61,12 @@
   let cartTotal: number | null = null;
   let expectedDposServiceFee: number | null = null;
   let expectedDposTotal: number | null = null;
+  let shopResults: FeeFlowResult | null = null;
+  let tableResults: FeeFlowResult | null = null;
   let totalsMatch = false;
   let showCalculationBreakdown = false;
   let showItems = false;
+  let showEmbeddedFeesPopover = false;
   let isPlatformFeeTooltipVisible = false;
   let isEmbeddedItemFeeTooltipVisible = false;
   let embeddedItemFeeField: HTMLDivElement;
@@ -55,11 +74,16 @@
   let itemInputs: HTMLInputElement[] = [];
   let itemsPopover: HTMLDivElement;
   let itemsTrigger: HTMLButtonElement;
+  let embeddedFeesPopover: HTMLDivElement | undefined = undefined;
+  let embeddedFeesTrigger: HTMLButtonElement | undefined = undefined;
 
   const dismissItemsPopover = (event: MouseEvent) => {
     const target = event.target as Node;
     if (!itemsPopover?.contains(target) && !itemsTrigger?.contains(target)) {
       showItems = false;
+    }
+    if (!embeddedFeesPopover?.contains(target) && !embeddedFeesTrigger?.contains(target)) {
+      showEmbeddedFeesPopover = false;
     }
     if (!embeddedItemFeeField?.contains(target)) isEmbeddedItemFeeTooltipVisible = false;
     if (!platformFeeField?.contains(target)) isPlatformFeeTooltipVisible = false;
@@ -90,7 +114,10 @@
   };
 
   const handleItemsEscape = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') showItems = false;
+    if (event.key === 'Escape') {
+      showItems = false;
+      showEmbeddedFeesPopover = false;
+    }
   };
 
   onMount(() => {
@@ -181,6 +208,8 @@
       items = items;
     }
     if (field === 'surchargeRate') surchargeRate = sanitized;
+    if (field === 'shopEmbeddedFeeRate') shopEmbeddedFeeRate = sanitized;
+    if (field === 'tableEmbeddedFeeRate') tableEmbeddedFeeRate = sanitized;
     if (field === 'currentServiceFeeRate') currentServiceFeeRate = sanitized;
 
     isPlatformFeeTooltipVisible = false;
@@ -208,15 +237,21 @@
 
   const parseOptionalAmount = (value: string) => (value.trim() === '' ? 0 : parseAmount(value));
   const hasEmbeddedItemFee = () => parseOptionalAmount(surchargeRate) > 0;
+  const hasShopEmbeddedFee = () => parseOptionalAmount(shopEmbeddedFeeRate) > 0;
+  const hasTableEmbeddedFee = () => parseOptionalAmount(tableEmbeddedFeeRate) > 0;
   const hasPlatformFee = () => parseOptionalAmount(currentServiceFeeRate) > 0;
 
-  const hasExactlyOneFee = () => hasEmbeddedItemFee() !== hasPlatformFee();
+  const hasValidFeeSelection = () =>
+    !(hasEmbeddedItemFee() && hasPlatformFee()) &&
+    (hasEmbeddedItemFee() || hasPlatformFee() || hasShopEmbeddedFee() || hasTableEmbeddedFee());
 
   const canCalculate = () =>
     isValidDecimal(items[0].price, MAX_PRICE) &&
     isValidOptionalDecimal(surchargeRate, MAX_SURCHARGE_PERCENTAGE) &&
+    isValidOptionalDecimal(shopEmbeddedFeeRate, MAX_SURCHARGE_PERCENTAGE) &&
+    isValidOptionalDecimal(tableEmbeddedFeeRate, MAX_SURCHARGE_PERCENTAGE) &&
     isValidOptionalDecimal(currentServiceFeeRate, MAX_SERVICE_FEE_RATE) &&
-    hasExactlyOneFee();
+    hasValidFeeSelection();
 
   const validateFields = () => {
     let valid = true;
@@ -238,12 +273,22 @@
       valid = false;
     }
 
+    if (!isValidOptionalDecimal(shopEmbeddedFeeRate, MAX_SURCHARGE_PERCENTAGE)) {
+      validationErrors.shopEmbeddedFeeRate = 'Enter a valid non-negative shop embedded fee with up to 2 decimals.';
+      valid = false;
+    }
+
+    if (!isValidOptionalDecimal(tableEmbeddedFeeRate, MAX_SURCHARGE_PERCENTAGE)) {
+      validationErrors.tableEmbeddedFeeRate = 'Enter a valid non-negative table embedded fee with up to 2 decimals.';
+      valid = false;
+    }
+
     if (!isValidOptionalDecimal(currentServiceFeeRate, MAX_SERVICE_FEE_RATE)) {
       validationErrors.currentServiceFeeRate = 'Enter a valid non-negative platform fee with up to 2 decimals.';
       valid = false;
     }
 
-    if (!hasExactlyOneFee()) {
+    if (!hasValidFeeSelection()) {
       valid = false;
     }
 
@@ -272,17 +317,24 @@
     items = items.filter((_, index) => index !== itemIndex);
     if (items.length === 1) showItems = false;
     calculatedItems = [];
+    shopResults = null;
+    tableResults = null;
     hasCalculated = false;
   };
 
   const reset = () => {
     items = [{ price: '', error: '' }];
     showItems = false;
+    showEmbeddedFeesPopover = false;
     surchargeRate = '';
+    shopEmbeddedFeeRate = '';
+    tableEmbeddedFeeRate = '';
     currentServiceFeeRate = '';
     validationErrors = {
       originalPrice: '',
       surchargeRate: '',
+      shopEmbeddedFeeRate: '',
+      tableEmbeddedFeeRate: '',
       currentServiceFeeRate: '',
     };
     formError = '';
@@ -294,6 +346,8 @@
     cartTotal = null;
     expectedDposServiceFee = null;
     expectedDposTotal = null;
+    shopResults = null;
+    tableResults = null;
     totalsMatch = false;
     showCalculationBreakdown = false;
   };
@@ -302,6 +356,8 @@
     validationErrors = {
       originalPrice: '',
       surchargeRate: '',
+      shopEmbeddedFeeRate: '',
+      tableEmbeddedFeeRate: '',
       currentServiceFeeRate: '',
     };
     formError = '';
@@ -313,6 +369,8 @@
     }
 
     const surchargeRateValue = parseOptionalAmount(surchargeRate);
+    const shopRateValue = parseOptionalAmount(shopEmbeddedFeeRate);
+    const tableRateValue = parseOptionalAmount(tableEmbeddedFeeRate);
     const currentServiceFeeRateValue = parseOptionalAmount(currentServiceFeeRate);
 
     const validItems = items
@@ -335,6 +393,32 @@
       expectedDposTotal: roundHalfUp(originalTotal + roundHalfUp(currentFee + surchargeTotal)),
     };
 
+    const calculateFeeFlow = (rate: number): FeeFlowResult => {
+      const feeItems = validItems.map((item) => {
+        const embeddedFee = calculateSurchargeAmount(item.original, rate);
+        return {
+          original: item.original,
+          embeddedFee,
+          ooPrice: calculateOoItemPrice(item.original, embeddedFee),
+        };
+      });
+      const feeTotal = feeItems.reduce((total, item) => total + item.embeddedFee, 0);
+      const flowOriginalTotal = feeItems.reduce((total, item) => total + item.original, 0);
+      const flowOoTotal = feeItems.reduce((total, item) => total + item.ooPrice, 0);
+      const flowCurrentServiceFee = calculateServiceFeeAmount(flowOoTotal, currentServiceFeeRateValue);
+      const flowDposServiceFee = roundHalfUp(flowCurrentServiceFee + feeTotal);
+
+      return {
+        items: feeItems,
+        embeddedFeeAmount: feeTotal,
+        ooItemPrice: flowOoTotal,
+        currentServiceFeeAmount: flowCurrentServiceFee,
+        cartTotal: calculateCartTotal(flowOoTotal, flowCurrentServiceFee),
+        expectedDposServiceFee: flowDposServiceFee,
+        expectedDposTotal: roundHalfUp(flowOriginalTotal + flowDposServiceFee),
+      };
+    };
+
     calculatedItems = validItems;
     surchargeAmount = result.surchargeAmount;
     currentServiceFeeAmount = result.currentServiceFeeAmount;
@@ -342,6 +426,8 @@
     cartTotal = result.cartTotal;
     expectedDposServiceFee = result.expectedDposServiceFee;
     expectedDposTotal = result.expectedDposTotal;
+    shopResults = hasShopEmbeddedFee() ? calculateFeeFlow(shopRateValue) : null;
+    tableResults = hasTableEmbeddedFee() ? calculateFeeFlow(tableRateValue) : null;
     totalsMatch = cartTotal === expectedDposTotal;
     hasCalculated = true;
   };
@@ -505,6 +591,37 @@ onDestroy(() => {
             {/if}
           </div>
           <p class="text-xs text-slate-500">Added to each item price.</p>
+          <div class="relative mt-4">
+            <button type="button" bind:this={embeddedFeesTrigger} aria-expanded={showEmbeddedFeesPopover} aria-controls="embedded-fees-popover" data-testid="add-embedded-fee" on:click={() => (showEmbeddedFeesPopover = !showEmbeddedFeesPopover)} class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-400">
+              <span class="text-base leading-none">+</span> Add Embedded Fee
+            </button>
+            {#if showEmbeddedFeesPopover}
+              <div id="embedded-fees-popover" data-testid="embedded-fees-popover" bind:this={embeddedFeesPopover} class="absolute left-0 top-full z-20 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_12px_28px_-14px_rgba(15,23,42,0.45)]">
+                <div class="mb-3 flex items-center justify-between border-b border-slate-200 pb-2 text-sm font-semibold text-slate-800">
+                  <span>Embedded Fees</span>
+                  <button type="button" aria-label="Close Embedded Fees" on:click={() => (showEmbeddedFeesPopover = false)} class="text-base font-normal text-slate-500 hover:text-slate-900">×</button>
+                </div>
+                <div class="space-y-3">
+                  <div class="grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-3">
+                    <span class="text-sm font-medium text-slate-700">Table</span>
+                    <div class="relative">
+                      <input type="text" inputmode="decimal" autocomplete="off" placeholder="1.00" aria-label="Table Embedded Fee" aria-invalid={validationErrors.tableEmbeddedFeeRate ? 'true' : 'false'} data-testid="table-embedded-fee" value={tableEmbeddedFeeRate} on:input={(event) => handleInput('tableEmbeddedFeeRate', event.currentTarget.value)} on:keydown={allowInputKey} on:paste={handlePaste} class="w-full rounded-lg border px-3 py-2 pr-9 text-base font-medium text-slate-900 outline-none focus:border-slate-400 {validationErrors.tableEmbeddedFeeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}" />
+                      <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-slate-500">%</span>
+                    </div>
+                  </div>
+                  {#if validationErrors.tableEmbeddedFeeRate}<p class="-mt-2 text-xs text-rose-600">{validationErrors.tableEmbeddedFeeRate}</p>{/if}
+                  <div class="grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-3">
+                    <span class="text-sm font-medium text-slate-700">Shop</span>
+                    <div class="relative">
+                      <input type="text" inputmode="decimal" autocomplete="off" placeholder="1.00" aria-label="Shop Embedded Fee" aria-invalid={validationErrors.shopEmbeddedFeeRate ? 'true' : 'false'} data-testid="shop-embedded-fee" value={shopEmbeddedFeeRate} on:input={(event) => handleInput('shopEmbeddedFeeRate', event.currentTarget.value)} on:keydown={allowInputKey} on:paste={handlePaste} class="w-full rounded-lg border px-3 py-2 pr-9 text-base font-medium text-slate-900 outline-none focus:border-slate-400 {validationErrors.shopEmbeddedFeeRate ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'}" />
+                      <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-slate-500">%</span>
+                    </div>
+                  </div>
+                  {#if validationErrors.shopEmbeddedFeeRate}<p class="-mt-2 text-xs text-rose-600">{validationErrors.shopEmbeddedFeeRate}</p>{/if}
+                </div>
+              </div>
+            {/if}
+          </div>
           {#if validationErrors.surchargeRate}
             <p class="text-sm text-rose-600">{validationErrors.surchargeRate}</p>
           {/if}
@@ -600,8 +717,12 @@ onDestroy(() => {
         <div class="border-t border-slate-200 px-6 pb-6" data-testid="calculation-breakdown">
           {#if hasCalculated}
             {@const surchargeRateValue = parseAmount(surchargeRate)}
+            {@const shopRateValue = parseOptionalAmount(shopEmbeddedFeeRate)}
+            {@const tableRateValue = parseOptionalAmount(tableEmbeddedFeeRate)}
             {@const serviceFeeInput = parseOptionalAmount(currentServiceFeeRate)}
             {@const surchargeDecimal = formatDecimalMultiplier(surchargeRateValue)}
+            {@const shopDecimal = formatDecimalMultiplier(shopRateValue)}
+            {@const tableDecimal = formatDecimalMultiplier(tableRateValue)}
 
             <div class="grid min-w-0 grid-cols-1 gap-6 pt-5 md:grid-cols-2 lg:grid-cols-3">
               <div class="flex min-w-0 flex-col">
@@ -610,6 +731,24 @@ onDestroy(() => {
                   <p class="break-words font-mono text-sm leading-6 text-slate-800">{formatTwoDecimals(item.original)} × {surchargeDecimal} = {formatTwoDecimals(item.surcharge)}</p>
                 {/each}
               </div>
+
+              {#if hasShopEmbeddedFee() && shopResults}
+                <div class="flex min-w-0 flex-col">
+                  <h3 class="text-xs font-semibold leading-4 text-slate-600">Shop Embedded Fee</h3>
+                  {#each shopResults.items as item}
+                    <p class="break-words font-mono text-sm leading-6 text-slate-800">{formatTwoDecimals(item.original)} × {shopDecimal} = {formatTwoDecimals(item.embeddedFee)}</p>
+                  {/each}
+                </div>
+              {/if}
+
+              {#if hasTableEmbeddedFee() && tableResults}
+                <div class="flex min-w-0 flex-col">
+                  <h3 class="text-xs font-semibold leading-4 text-slate-600">Table Embedded Fee</h3>
+                  {#each tableResults.items as item}
+                    <p class="break-words font-mono text-sm leading-6 text-slate-800">{formatTwoDecimals(item.original)} × {tableDecimal} = {formatTwoDecimals(item.embeddedFee)}</p>
+                  {/each}
+                </div>
+              {/if}
 
               <div class="min-w-0 space-y-1">
                 <h3 class="text-xs font-semibold text-slate-600">Expected OO Item Price</h3>
@@ -662,6 +801,87 @@ onDestroy(() => {
         </div>
       {/if}
     </section>
+
+    {#snippet feeFlowCards(flowKey: 'shop' | 'table', flowName: string, feeName: string, feeRate: string, results: FeeFlowResult | null)}
+      {@const feeItems = results?.items ?? []}
+      <section aria-label={`${flowName} Embedded Fee Results`}>
+        <h2 class="mb-3 text-sm font-semibold uppercase text-slate-700">{flowName} Embedded Fee <span class="ml-2 font-medium text-slate-500" data-testid={`${flowKey}-embedded-fee-rate`}>{parseOptionalAmount(feeRate)}%</span></h2>
+        <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
+            <div class="mb-6 flex items-center justify-between gap-4">
+              <h2 class="text-xl font-semibold text-slate-950">Online Ordering</h2>
+            </div>
+            <div class="space-y-3">
+              <div class="grid grid-cols-3 gap-5 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span class="text-center">Original</span><span class="text-center">OO Price</span><span class="text-center">{feeName}</span>
+              </div>
+              <div class="min-h-10 space-y-2">
+                {#each feeItems as item, index}
+                  <div class="grid grid-cols-3 items-center gap-5 rounded-lg bg-slate-50 px-3 py-2 font-mono text-[15px] text-slate-900">
+                    <span class="text-center" data-testid={`${flowKey}-oo-original-price-${index + 1}`}>{formatTwoDecimals(item.original)}</span>
+                    <span class="text-center font-semibold" data-testid={`${flowKey}-oo-item-price-${index + 1}`}>{formatTwoDecimals(item.ooPrice)}</span>
+                    <span class="text-center" data-testid={`${flowKey}-oo-fee-amount-${index + 1}`}>{formatTwoDecimals(item.embeddedFee)}</span>
+                  </div>
+                {/each}
+              </div>
+              <p class="text-sm text-slate-500">The {flowName.toLowerCase()} embedded fee is included in the displayed item price.</p>
+            </div>
+          </section>
+
+          <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
+            <div class="mb-6"><h2 class="text-xl font-semibold text-slate-950">Cart</h2></div>
+            <div class="space-y-3">
+              <div class="space-y-2">
+                <p class="px-1 text-xs font-medium text-slate-600">Item Price</p>
+                {#each feeItems as item, index}
+                  <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
+                    <span class="text-sm font-medium text-slate-600">Item {index + 1}</span>
+                    <span class="text-right text-[15px] font-medium text-slate-950" data-testid={`${flowKey}-cart-item-price-${index + 1}`}>{formatTwoDecimals(item.ooPrice)}</span>
+                  </div>
+                {/each}
+              </div>
+              {#if results?.currentServiceFeeAmount}
+                <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
+                  <span class="text-sm font-medium text-slate-600">Current Platform Fee</span>
+                  <span class="text-right text-[15px] font-medium text-slate-950">{formatTwoDecimals(results.currentServiceFeeAmount)}</span>
+                </div>
+              {/if}
+              <div class="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]">
+                <span class="text-sm font-semibold text-slate-900">Expected Cart Total</span>
+                <span class="text-right text-lg font-semibold text-slate-950" data-testid={`${flowKey}-cart-total`}>{results ? formatTwoDecimals(results.cartTotal) : ''}</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)] md:col-span-2 lg:col-span-1">
+            <div class="mb-6"><h2 class="text-xl font-semibold text-slate-950">DPOS Order Summary</h2></div>
+            <div class="space-y-3">
+              <div class="space-y-2">
+                <p class="px-1 text-xs font-medium text-slate-600">Original Item Price</p>
+                {#each feeItems as item, index}
+                  <div class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
+                    <span class="text-sm font-medium text-slate-600">Item {index + 1}</span>
+                    <span class="text-right text-[15px] font-medium text-slate-950" data-testid={`${flowKey}-dpos-original-price-${index + 1}`}>{formatTwoDecimals(item.original)}</span>
+                  </div>
+                {/each}
+              </div>
+              <div class="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]">
+                <span class="text-sm font-semibold text-slate-900">Platform Fee</span>
+                <span class="text-right text-lg font-semibold text-slate-950" data-testid={`${flowKey}-dpos-service-fee`}>{results ? formatTwoDecimals(results.expectedDposServiceFee) : ''}</span>
+              </div>
+              <div class="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]">
+                <span class="text-sm font-semibold text-slate-900">Total</span>
+                <span class="text-right text-lg font-semibold text-slate-950" data-testid={`${flowKey}-dpos-total`}>{results ? formatTwoDecimals(results.expectedDposTotal) : ''}</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    {/snippet}
+
+    {#if hasShopEmbeddedFee() || hasTableEmbeddedFee()}
+      <h2 class="text-sm font-semibold uppercase text-slate-700">Item Embedded Fee {#if hasEmbeddedItemFee()}<span class="ml-2 font-medium text-slate-500" data-testid="item-embedded-fee-rate">{parseOptionalAmount(surchargeRate)}%</span>{/if}</h2>
+    {/if}
 
     <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
@@ -755,6 +975,14 @@ onDestroy(() => {
       </div>
     </section>
     </div>
+
+    {#if hasTableEmbeddedFee()}
+      {@render feeFlowCards('table', 'Table', 'Table Embedded Fee', tableEmbeddedFeeRate, tableResults)}
+    {/if}
+
+    {#if hasShopEmbeddedFee()}
+      {@render feeFlowCards('shop', 'Shop', 'Shop Embedded Fee', shopEmbeddedFeeRate, shopResults)}
+    {/if}
 
     
   </div>
