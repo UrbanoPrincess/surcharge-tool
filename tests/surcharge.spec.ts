@@ -349,3 +349,118 @@ test('minus sign is stripped from input during entry', async ({ page }) => {
   await expect(page.getByTestId('oo-item-price')).toHaveText('10.10');
   await expect(page.getByTestId('cart-total')).toHaveText('10.10');
 });
+
+test('one Embedded Fee popover adds Shop or Table as separate flows', async ({ page }) => {
+  await expect(page.getByTestId('add-shop')).toHaveCount(0);
+  await expect(page.getByTestId('add-table')).toHaveCount(0);
+  await expect(page.getByTestId('shop-embedded-fee')).toHaveCount(0);
+  await expect(page.getByTestId('table-embedded-fee')).toHaveCount(0);
+
+  await page.getByLabel('Original Price').fill('12.00');
+  await page.getByLabel('Embedded Item Fee').fill('5');
+  await page.getByTestId('add-embedded-fee').click();
+  const embeddedFeesPopover = page.getByTestId('embedded-fees-popover');
+  await expect(embeddedFeesPopover).toContainText('Embedded Fees');
+  await expect(page.getByTestId('shop-embedded-fee')).toBeVisible();
+  await expect(page.getByTestId('table-embedded-fee')).toBeVisible();
+  const tableLabelY = await embeddedFeesPopover.getByText('Table', { exact: true }).evaluate((element) => element.getBoundingClientRect().y);
+  const shopLabelY = await embeddedFeesPopover.getByText('Shop', { exact: true }).evaluate((element) => element.getBoundingClientRect().y);
+  expect(tableLabelY).toBeLessThan(shopLabelY);
+  await page.getByTestId('shop-embedded-fee').fill('10');
+  await page.getByRole('button', { name: 'Calculate' }).click();
+
+  const shopGroup = page.getByRole('region', { name: 'Shop Embedded Fee Results' });
+  await expect(shopGroup.getByRole('heading', { name: 'Online Ordering', exact: true })).toHaveCount(1);
+  await expect(shopGroup.getByRole('heading', { name: 'Cart', exact: true })).toHaveCount(1);
+  await expect(shopGroup.getByRole('heading', { name: 'DPOS Order Summary', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Table Embedded Fee Results' })).toHaveCount(0);
+  await expect(page.getByTestId('oo-item-price')).toHaveText('12.60');
+  await expect(page.getByTestId('shop-oo-item-price-1')).toHaveText('13.20');
+  await expect(page.getByTestId('shop-cart-item-price-1')).toHaveText('13.20');
+  await expect(page.getByTestId('shop-cart-embedded-fee')).toHaveCount(0);
+  await expect(page.getByTestId('shop-cart-total')).toHaveText('13.20');
+  await expect(page.getByTestId('shop-dpos-embedded-fee')).toHaveCount(0);
+  await expect(page.getByTestId('shop-dpos-service-fee')).toHaveText('1.20');
+  await expect(page.getByTestId('shop-dpos-total')).toHaveText('13.20');
+
+  await page.getByRole('button', { name: 'Reset' }).click();
+  await page.getByLabel('Original Price').fill('12.00');
+  await page.getByLabel('Embedded Item Fee').fill('5');
+  await page.getByTestId('add-embedded-fee').click();
+  await page.getByTestId('table-embedded-fee').fill('20');
+  await page.getByRole('button', { name: 'Calculate' }).click();
+
+  const tableGroup = page.getByRole('region', { name: 'Table Embedded Fee Results' });
+  await expect(tableGroup.getByRole('heading', { name: 'Online Ordering', exact: true })).toHaveCount(1);
+  await expect(tableGroup.getByRole('heading', { name: 'Cart', exact: true })).toHaveCount(1);
+  await expect(tableGroup.getByRole('heading', { name: 'DPOS Order Summary', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Shop Embedded Fee Results' })).toHaveCount(0);
+  await expect(page.getByTestId('oo-item-price')).toHaveText('12.60');
+  await expect(page.getByTestId('table-oo-item-price-1')).toHaveText('14.40');
+  await expect(page.getByTestId('table-cart-item-price-1')).toHaveText('14.40');
+  await expect(page.getByTestId('table-cart-embedded-fee')).toHaveCount(0);
+  await expect(page.getByTestId('table-cart-total')).toHaveText('14.40');
+  await expect(page.getByTestId('table-dpos-embedded-fee')).toHaveCount(0);
+  await expect(page.getByTestId('table-dpos-service-fee')).toHaveText('2.40');
+  await expect(page.getByTestId('table-dpos-total')).toHaveText('14.40');
+});
+
+test('Item, Shop, and Table fee values remain independent through recalculation', async ({ page }) => {
+  await page.getByLabel('Original Price').fill('12.00');
+  await page.getByLabel('Embedded Item Fee').fill('2');
+  await page.getByTestId('add-embedded-fee').click();
+  await page.getByTestId('shop-embedded-fee').fill('5');
+  await page.getByTestId('table-embedded-fee').fill('10');
+  await page.getByRole('button', { name: 'Calculate' }).click();
+
+  const expectFlowPrices = async (itemPrice: string, shopPrice: string, tablePrice: string) => {
+    await expect(page.getByTestId('oo-item-price')).toHaveText(itemPrice);
+    await expect(page.getByTestId('shop-oo-item-price-1')).toHaveText(shopPrice);
+    await expect(page.getByTestId('table-oo-item-price-1')).toHaveText(tablePrice);
+  };
+
+  await expectFlowPrices('12.24', '12.60', '13.20');
+  await expect(page.getByTestId('item-embedded-fee-rate')).toHaveText('2%');
+  await expect(page.getByTestId('shop-embedded-fee-rate')).toHaveText('5%');
+  await expect(page.getByTestId('table-embedded-fee-rate')).toHaveText('10%');
+  await expect(page.getByRole('region', { name: 'Shop Embedded Fee Results' }).getByRole('heading', { name: 'Online Ordering', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Table Embedded Fee Results' }).getByRole('heading', { name: 'Online Ordering', exact: true })).toHaveCount(1);
+  const tableGroupBox = await page.getByRole('region', { name: 'Table Embedded Fee Results' }).boundingBox();
+  const shopGroupBox = await page.getByRole('region', { name: 'Shop Embedded Fee Results' }).boundingBox();
+  expect(tableGroupBox).not.toBeNull();
+  expect(shopGroupBox).not.toBeNull();
+  expect(tableGroupBox!.y).toBeLessThan(shopGroupBox!.y);
+
+  await page.getByLabel('Embedded Item Fee').fill('3');
+  await page.getByRole('button', { name: 'Calculate' }).click();
+  await expectFlowPrices('12.36', '12.60', '13.20');
+  await expect(page.getByTestId('item-embedded-fee-rate')).toHaveText('3%');
+  await expect(page.getByTestId('shop-embedded-fee-rate')).toHaveText('5%');
+  await expect(page.getByTestId('table-embedded-fee-rate')).toHaveText('10%');
+
+  await page.getByTestId('add-embedded-fee').click();
+  await page.getByTestId('shop-embedded-fee').fill('7');
+  await page.getByRole('button', { name: 'Calculate' }).click();
+  await expectFlowPrices('12.36', '12.84', '13.20');
+  await expect(page.getByTestId('item-embedded-fee-rate')).toHaveText('3%');
+  await expect(page.getByTestId('shop-embedded-fee-rate')).toHaveText('7%');
+  await expect(page.getByTestId('table-embedded-fee-rate')).toHaveText('10%');
+
+  await page.getByTestId('add-embedded-fee').click();
+  await page.getByTestId('table-embedded-fee').fill('1');
+  await page.getByRole('button', { name: 'Calculate' }).click();
+  await expectFlowPrices('12.36', '12.84', '12.12');
+  await expect(page.getByTestId('item-embedded-fee-rate')).toHaveText('3%');
+  await expect(page.getByTestId('shop-embedded-fee-rate')).toHaveText('7%');
+  await expect(page.getByTestId('table-embedded-fee-rate')).toHaveText('1%');
+
+  await page.getByTestId('calculation-breakdown-toggle').click();
+  const breakdown = page.getByTestId('calculation-breakdown');
+  await expect(breakdown).toContainText('Embedded Item Fee');
+  await expect(breakdown).toContainText('Shop Embedded Fee');
+  await expect(breakdown).toContainText('Table Embedded Fee');
+
+  await page.getByRole('button', { name: 'Reset' }).click();
+  await expect(page.getByRole('region', { name: 'Shop Embedded Fee Results' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Table Embedded Fee Results' })).toHaveCount(0);
+});
