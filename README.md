@@ -1,61 +1,60 @@
-# Surcharge Tool — Easy Overview
+# Embedded Fee Calculator
 
-This small SvelteKit project provides a simple surcharge calculator UI with end-to-end Playwright tests. The README below explains the purpose of the project, how to run it, and a short description of the important files and folders so you can quickly find what you need.
+The Embedded Fee Calculator validates how item, shop, and table embedded fees flow through Online Ordering, Cart, and DPOS totals. It is designed for quick QA and comparison of fee behavior using one or more items.
 
-## Quick start
+## Key features
 
-- Install: `npm install`
-- Build: `npm run build`
-- Preview (local): `npm run preview -- --port 4173`
-- Run Playwright tests: `npx playwright test` or `npx playwright test tests/surcharge.spec.ts`
+- Calculate an independent Embedded Item Fee, Shop Embedded Fee, or Table Embedded Fee.
+- Add Shop and Table fees through the **Add Embedded Fee** popover without replacing the item fee.
+- Enter multiple item prices and calculate each item independently.
+- Apply optional current platform fees and validate incompatible fee selections.
+- Show calculation breakdowns with deterministic two-decimal, half-up rounding.
+- Compare the resulting Online Ordering, Cart, and DPOS values for each fee flow.
+- Switch between Shop and Table fee flows while retaining each flow's independent rate and results.
+- Swap between **Documentation View**, the original result layout, and **Comparison View**, the newer side-by-side fee-flow layout.
+- Reset inputs and results for repeatable test scenarios.
 
-## What this project does
+## Calculation logic
 
-- Lets a user enter an original price and a surcharge percentage, then shows the surcharge amount and final price.
-- Contains business logic separated from UI so behavior is easy to test.
+For each item, the calculator applies the selected fee independently:
 
-## Short file descriptions
+1. Embedded fee amount = original item price × fee rate.
+2. Online Ordering item price = original item price + embedded fee amount.
+3. Cart total = Online Ordering item price + current platform fee, when present.
+4. DPOS platform fee and total are calculated separately so the expected DPOS result can be compared with the Cart result.
 
-- **package.json**: Project metadata and scripts (install, build, preview, tests).
-- **README.md**: (this file) Quick project overview, run commands and file descriptions.
+All monetary results are rounded to two decimal places using half-up rounding. Shop and Table flows repeat the same calculation with their own fee rates and result sets.
 
-- **surcharge_tool_v1/package.json**: The SvelteKit app's package file with local scripts and dependencies.
-- **surcharge_tool_v1/vite.config.ts**: Vite configuration used for building and previewing the SvelteKit app.
-- **surcharge_tool_v1/playwright.config.ts**: Playwright configuration that starts the preview server and sets test options.
-- **surcharge_tool_v1/tsconfig.json**: TypeScript compiler settings for the app.
+## Views
 
-- **surcharge_tool_v1/src/app.html**: Base HTML template used by SvelteKit for the client page shell.
-- **surcharge_tool_v1/src/app.d.ts**: Small TypeScript ambient types used in the Svelte app.
+- **Documentation View**: Presents the original Online Ordering, Cart, and DPOS result cards, followed by Shop and Table fee sections when enabled.
+- **Comparison View**: Shows each enabled fee flow in a consistent comparison card with its inputs, fee amount, Cart result, and DPOS result.
 
-- **surcharge_tool_v1/src/lib/**: Reusable code used across the app.
-  - **index.ts**: Library entry (exports). Use this to access shared utilities.
-  - **assets/**: Static assets used by the UI (images, icons).
-  - **vitest-examples/**: Example unit tests and components used for local testing (not the Playwright tests).
+## Tech stack
 
-- **surcharge_tool_v1/src/lib/calculations.ts**: Pure business logic — functions that calculate the surcharge amount and final price. These functions are written to be deterministic and easy to unit test.
+- SvelteKit and Svelte 5
+- TypeScript
+- Vite
+- Tailwind CSS 4
+- Flowbite Svelte and Flowbite Svelte Icons
+- Vitest for unit tests
+- Playwright for end-to-end tests
 
-- **surcharge_tool_v1/src/routes/+page.svelte**: The main UI page with the surcharge form, validation, and result display. This is where inputs are normalized and the calculate button triggers the library functions.
-- **surcharge_tool_v1/src/routes/+layout.svelte**: The app layout used across pages (basic shell and styles).
-- **surcharge_tool_v1/src/routes/layout.css**: Small CSS file with layout styles.
+## Setup
 
-- **surcharge_tool_v1/src/routes/demo/**: Demo route and Playwright-friendly pages used by tests.
-  - **+page.svelte**: Demo content for manual exploration.
-  - **playwright/page.svelte.e2e.ts**: Example e2e helper used during test development.
+```bash
+npm install
+npm run dev
+```
 
-- **static/robots.txt**: Static file served as-is by the preview server.
+Useful commands:
 
-- **tests/surcharge.spec.ts**: End-to-end Playwright tests that exercise the surcharge form. These tests verify valid inputs, decimals, zero values, invalid input behavior, and negative-value validation.
+```bash
+npm run check       # Svelte and TypeScript validation
+npm run test:unit   # Unit tests
+npm test            # Playwright end-to-end tests
+npm run build       # Production build
+npm run preview     # Preview the production build
+```
 
-## Notes & tips
-
-- The UI keeps form fields as strings and parses them intentionally to avoid runtime `.trim()` errors when Svelte binds non-string values.
-- If preview fails due to a port conflict, kill existing Node processes that are using the port and retry `npm run preview -- --port 4173`.
-
----
-
-If you'd like, I can expand this README with:
-- A line-by-line explanation of `surcharge_tool_v1/src/routes/+page.svelte` (validation and normalization).
-- A full list of every file in the repo (longer, exhaustive catalog).
-
-# surcharge-tool
-A simple tool for calculating and validating item surcharges.
+The main calculator UI is in `src/routes/+page.svelte`, calculation helpers are in `src/lib/calculations.ts`, and end-to-end coverage is in `tests/surcharge.spec.ts`.
