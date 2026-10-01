@@ -5,6 +5,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('result sections remain blank before calculation', async ({ page }) => {
+  await expect(page.getByTestId('results-view-toggle')).toHaveCount(0);
   await expect(page.getByTestId('oo-item-price')).toHaveCount(0);
   await expect(page.getByTestId('cart-item-price')).toHaveCount(0);
   await expect(page.getByTestId('cart-total')).toHaveText('');
@@ -463,4 +464,61 @@ test('Item, Shop, and Table fee values remain independent through recalculation'
   await page.getByRole('button', { name: 'Reset' }).click();
   await expect(page.getByRole('region', { name: 'Shop Embedded Fee Results' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Table Embedded Fee Results' })).toHaveCount(0);
+});
+
+test('comparison view shows side-by-side fee flows and switches back to Documentation view', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByLabel('Original Price').fill('12.00');
+  await page.getByLabel('Embedded Item Fee').fill('2');
+  await page.getByTestId('add-embedded-fee').click();
+  await page.getByTestId('table-embedded-fee').fill('10');
+  await page.getByTestId('shop-embedded-fee').fill('5');
+  await page.getByRole('button', { name: 'Calculate' }).click();
+
+  const viewToggle = page.getByTestId('results-view-toggle');
+  await expect(viewToggle).toHaveAttribute('aria-label', 'Switch to comparison view');
+  await viewToggle.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('Comparison view');
+  await viewToggle.click();
+
+  const comparison = page.getByTestId('results-comparison-view');
+  await expect(comparison).toBeVisible();
+  await expect(viewToggle).toHaveAttribute('aria-label', 'Switch to documentation view');
+  await expect(page.getByTestId('comparison-item-oo-price-1')).toHaveText('12.24');
+  await expect(page.getByTestId('comparison-table-oo-price-1')).toHaveText('13.20');
+  await expect(page.getByTestId('comparison-shop-oo-price-1')).toHaveText('12.60');
+  await expect(page.getByTestId('comparison-item-cart-total')).toHaveText('12.24');
+  await expect(page.getByTestId('comparison-table-cart-total')).toHaveText('13.20');
+  await expect(page.getByTestId('comparison-shop-cart-total')).toHaveText('12.60');
+
+  const itemColumn = await page.getByRole('region', { name: 'Online Ordering comparison' }).boundingBox();
+  const tableColumn = await page.getByRole('region', { name: 'Table comparison' }).boundingBox();
+  const shopColumn = await page.getByRole('region', { name: 'Shop comparison' }).boundingBox();
+  expect(itemColumn).not.toBeNull();
+  expect(tableColumn).not.toBeNull();
+  expect(shopColumn).not.toBeNull();
+  expect(itemColumn!.x).toBeLessThan(tableColumn!.x);
+  expect(tableColumn!.x).toBeLessThan(shopColumn!.x);
+
+  await page.setViewportSize({ width: 390, height: 900 });
+  const mobileItemColumn = await page.getByRole('region', { name: 'Online Ordering comparison' }).boundingBox();
+  const mobileTableColumn = await page.getByRole('region', { name: 'Table comparison' }).boundingBox();
+  const mobileShopColumn = await page.getByRole('region', { name: 'Shop comparison' }).boundingBox();
+  const mobileDocumentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(mobileItemColumn).not.toBeNull();
+  expect(mobileTableColumn).not.toBeNull();
+  expect(mobileShopColumn).not.toBeNull();
+  expect(mobileItemColumn!.y).toBeLessThan(mobileTableColumn!.y);
+  expect(mobileTableColumn!.y).toBeLessThan(mobileShopColumn!.y);
+  expect(mobileDocumentWidth).toBeLessThanOrEqual(390);
+
+  await viewToggle.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('Documentation view');
+  await viewToggle.click();
+  await expect(comparison).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Table Embedded Fee Results' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Shop Embedded Fee Results' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Reset' }).click();
+  await expect(page.getByTestId('results-view-toggle')).toHaveCount(0);
 });

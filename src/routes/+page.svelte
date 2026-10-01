@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
+  import { ObjectsColumnSolid } from 'flowbite-svelte-icons';
 
   import {
     calculateCartTotal,
@@ -67,6 +68,7 @@
   let showCalculationBreakdown = false;
   let showItems = false;
   let showEmbeddedFeesPopover = false;
+  let showComparisonView = false;
   let isPlatformFeeTooltipVisible = false;
   let isEmbeddedItemFeeTooltipVisible = false;
   let embeddedItemFeeField: HTMLDivElement;
@@ -212,6 +214,10 @@
     if (field === 'tableEmbeddedFeeRate') tableEmbeddedFeeRate = sanitized;
     if (field === 'currentServiceFeeRate') currentServiceFeeRate = sanitized;
 
+    if (parseOptionalAmount(shopEmbeddedFeeRate) === 0 && parseOptionalAmount(tableEmbeddedFeeRate) === 0) {
+      showComparisonView = false;
+    }
+
     isPlatformFeeTooltipVisible = false;
     isEmbeddedItemFeeTooltipVisible = false;
     validationErrors[field] = '';
@@ -326,6 +332,7 @@
     items = [{ price: '', error: '' }];
     showItems = false;
     showEmbeddedFeesPopover = false;
+    showComparisonView = false;
     surchargeRate = '';
     shopEmbeddedFeeRate = '';
     tableEmbeddedFeeRate = '';
@@ -430,6 +437,24 @@
     tableResults = hasTableEmbeddedFee() ? calculateFeeFlow(tableRateValue) : null;
     totalsMatch = cartTotal === expectedDposTotal;
     hasCalculated = true;
+  };
+
+  const getItemComparisonResults = (): FeeFlowResult | null => {
+    if (!hasCalculated) return null;
+
+    return {
+      items: calculatedItems.map((item) => ({
+        original: item.original,
+        embeddedFee: item.surcharge,
+        ooPrice: item.ooPrice,
+      })),
+      embeddedFeeAmount: surchargeAmount ?? 0,
+      ooItemPrice: ooItemPrice ?? 0,
+      currentServiceFeeAmount: currentServiceFeeAmount ?? 0,
+      cartTotal: cartTotal ?? 0,
+      expectedDposServiceFee: expectedDposServiceFee ?? 0,
+      expectedDposTotal: expectedDposTotal ?? 0,
+    };
   };
 
   const displayValue = (value: number | null) => (value !== null ? formatTwoDecimals(value) : '—');
@@ -805,14 +830,14 @@ onDestroy(() => {
     {#snippet feeFlowCards(flowKey: 'shop' | 'table', flowName: string, feeName: string, feeRate: string, results: FeeFlowResult | null)}
       {@const feeItems = results?.items ?? []}
       <section aria-label={`${flowName} Embedded Fee Results`}>
-        <h2 class="mb-3 text-sm font-semibold uppercase text-slate-700">{flowName} Embedded Fee <span class="ml-2 font-medium text-slate-500" data-testid={`${flowKey}-embedded-fee-rate`}>{parseOptionalAmount(feeRate)}%</span></h2>
+        <h2 class="mb-3 flex items-baseline gap-2 text-sm font-semibold text-slate-700">{flowName} Embedded Fee <span aria-hidden="true" class="font-normal text-slate-400">&middot;</span><span class="font-medium text-slate-500" data-testid={`${flowKey}-embedded-fee-rate`}>{parseOptionalAmount(feeRate)}%</span></h2>
         <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
-            <div class="mb-6 flex items-center justify-between gap-4">
+          <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)] sm:p-5">
+            <div class="mb-4 flex items-center justify-between gap-4 sm:mb-6">
               <h2 class="text-xl font-semibold text-slate-950">Online Ordering</h2>
             </div>
             <div class="space-y-3">
-              <div class="grid grid-cols-3 gap-5 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div class="grid grid-cols-3 gap-5 px-1 text-xs font-semibold uppercase leading-4 tracking-wide text-slate-500">
                 <span class="text-center">Original</span><span class="text-center">OO Price</span><span class="text-center">{feeName}</span>
               </div>
               <div class="min-h-10 space-y-2">
@@ -879,13 +904,117 @@ onDestroy(() => {
       </section>
     {/snippet}
 
+    {#snippet comparisonFlowCards(flowKey: 'item' | 'table' | 'shop', flowName: string, feeName: string, feeRate: string, results: FeeFlowResult | null)}
+      {@const flowItems = results?.items ?? []}
+      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]" aria-label={`${flowName} comparison`}>
+        <div class="border-b border-slate-200 pb-3">
+          <h2 class="text-lg font-semibold text-slate-950">{flowName}</h2>
+          <p class="mt-1 text-xs font-medium text-slate-500">{feeName} · {parseOptionalAmount(feeRate)}%</p>
+        </div>
+
+        <div class="space-y-4 pt-4">
+          <section>
+            <h3 class="mb-2 text-sm font-semibold text-slate-800">Online Ordering</h3>
+            <div class="grid grid-cols-3 gap-2 px-2 text-[11px] font-semibold uppercase text-slate-500">
+              <span>Original</span><span class="text-center">OO Price</span><span class="text-right">Fee</span>
+            </div>
+            <div class="mt-1 space-y-1">
+              {#each flowItems as item, index}
+                <div class="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 px-2 py-2 font-mono text-xs text-slate-800">
+                  <span data-testid={`comparison-${flowKey}-original-${index + 1}`}>{formatTwoDecimals(item.original)}</span>
+                  <span class="text-center font-semibold" data-testid={`comparison-${flowKey}-oo-price-${index + 1}`}>{formatTwoDecimals(item.ooPrice)}</span>
+                  <span class="text-right" data-testid={`comparison-${flowKey}-fee-${index + 1}`}>{formatTwoDecimals(item.embeddedFee)}</span>
+                </div>
+              {/each}
+            </div>
+          </section>
+
+          <section class="border-t border-slate-200 pt-3">
+            <h3 class="mb-2 text-sm font-semibold text-slate-800">Cart</h3>
+            <div class="space-y-1">
+              {#each flowItems as item, index}
+                <div class="flex justify-between gap-3 rounded-lg bg-slate-50 px-2 py-2 text-xs">
+                  <span class="text-slate-600">Item {index + 1}</span>
+                  <span class="font-medium text-slate-900" data-testid={`comparison-${flowKey}-cart-item-${index + 1}`}>{formatTwoDecimals(item.ooPrice)}</span>
+                </div>
+              {/each}
+              {#if results?.currentServiceFeeAmount}
+                <div class="flex justify-between gap-3 px-2 py-1 text-xs">
+                  <span class="text-slate-600">Current Platform Fee</span>
+                  <span class="font-medium text-slate-900">{formatTwoDecimals(results.currentServiceFeeAmount)}</span>
+                </div>
+              {/if}
+              <div class="flex justify-between gap-3 rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold">
+                <span>Expected Cart Total</span>
+                <span data-testid={`comparison-${flowKey}-cart-total`}>{results ? formatTwoDecimals(results.cartTotal) : ''}</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="border-t border-slate-200 pt-3">
+            <h3 class="mb-2 text-sm font-semibold text-slate-800">DPOS Order Summary</h3>
+            <div class="space-y-1">
+              {#each flowItems as item, index}
+                <div class="flex justify-between gap-3 rounded-lg bg-slate-50 px-2 py-2 text-xs">
+                  <span class="text-slate-600">Original Item {index + 1}</span>
+                  <span class="font-medium text-slate-900">{formatTwoDecimals(item.original)}</span>
+                </div>
+              {/each}
+              <div class="flex justify-between gap-3 px-2 py-1 text-xs">
+                <span class="text-slate-600">Platform Fee</span>
+                <span class="font-medium text-slate-900" data-testid={`comparison-${flowKey}-platform-fee`}>{results ? formatTwoDecimals(results.expectedDposServiceFee) : ''}</span>
+              </div>
+              <div class="flex justify-between gap-3 rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold">
+                <span>Total</span>
+                <span data-testid={`comparison-${flowKey}-dpos-total`}>{results ? formatTwoDecimals(results.expectedDposTotal) : ''}</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    {/snippet}
+
     {#if hasShopEmbeddedFee() || hasTableEmbeddedFee()}
-      <h2 class="text-sm font-semibold uppercase text-slate-700">Item Embedded Fee {#if hasEmbeddedItemFee()}<span class="ml-2 font-medium text-slate-500" data-testid="item-embedded-fee-rate">{parseOptionalAmount(surchargeRate)}%</span>{/if}</h2>
+      <div class="mb-4 flex justify-end">
+        <div class="group relative">
+          <button
+            type="button"
+            data-testid="results-view-toggle"
+            aria-label={showComparisonView ? 'Comparison view' : 'Documentation view'}
+            aria-describedby="results-view-tooltip"
+            aria-pressed={showComparisonView}
+            title={showComparisonView ? 'Comparison view' : 'Documentation view'}
+            on:click={() => (showComparisonView = !showComparisonView)}
+            class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+          >
+            <ObjectsColumnSolid aria-hidden="true" class="h-4 w-4" />
+          </button>
+          <span id="results-view-tooltip" role="tooltip" class="pointer-events-none invisible absolute right-0 top-full z-30 mt-2 w-max rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+            {showComparisonView ? 'Comparison view' : 'Documentation view'}
+          </span>
+        </div>
+      </div>
+    {/if}
+
+    {#if showComparisonView}
+      {@const itemComparisonResults = getItemComparisonResults()}
+      <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" data-testid="results-comparison-view">
+        {@render comparisonFlowCards('item', 'Online Ordering', 'Embedded Item Fee', surchargeRate, itemComparisonResults)}
+        {#if hasTableEmbeddedFee()}
+          {@render comparisonFlowCards('table', 'Table', 'Table Embedded Fee', tableEmbeddedFeeRate, tableResults)}
+        {/if}
+        {#if hasShopEmbeddedFee()}
+          {@render comparisonFlowCards('shop', 'Shop', 'Shop Embedded Fee', shopEmbeddedFeeRate, shopResults)}
+        {/if}
+      </div>
+    {:else}
+    {#if hasShopEmbeddedFee() || hasTableEmbeddedFee()}
+      <h2 class="flex items-baseline gap-2 text-sm font-semibold text-slate-700">Item Embedded Fee {#if hasEmbeddedItemFee()}<span aria-hidden="true" class="font-normal text-slate-400">&middot;</span><span class="font-medium text-slate-500" data-testid="item-embedded-fee-rate">{parseOptionalAmount(surchargeRate)}%</span>{/if}</h2>
     {/if}
 
     <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
-        <div class="mb-6 flex items-center justify-between gap-4">
+      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)] sm:p-5">
+        <div class="mb-4 flex items-center justify-between gap-4 sm:mb-6">
           <div>
             <h2 class="text-xl font-semibold text-slate-950">Online Ordering</h2>
           </div>
@@ -893,7 +1022,7 @@ onDestroy(() => {
         </div>
 
       <div class="space-y-3">
-        <div class="grid grid-cols-3 gap-5 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div class="grid grid-cols-3 gap-5 px-1 text-xs font-semibold uppercase leading-4 tracking-wide text-slate-500">
           <span class="text-center">Original</span><span class="text-center">OO Price</span><span class="text-center">Embedded Item Fee</span>
         </div>
         <div class="min-h-10 space-y-2">
@@ -911,8 +1040,8 @@ onDestroy(() => {
       </div>
     </section>
 
-      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)]">
-        <div class="mb-6 flex items-center justify-between gap-4">
+      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)] sm:p-5">
+        <div class="mb-4 flex items-center justify-between gap-4 sm:mb-6">
           <div>
            
             <h2 class="text-xl font-semibold text-slate-950">Cart</h2>
@@ -944,8 +1073,8 @@ onDestroy(() => {
       </div>
     </section>
 
-      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)] md:col-span-2 lg:col-span-1">
-        <div class="mb-6 flex items-center justify-between gap-4">
+      <section class="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.35)] md:col-span-2 lg:col-span-1 sm:p-5">
+        <div class="mb-4 flex items-center justify-between gap-4 sm:mb-6">
           <div>
         
             <h2 class="text-xl font-semibold text-slate-950">DPOS Order Summary</h2>
@@ -982,6 +1111,7 @@ onDestroy(() => {
 
     {#if hasShopEmbeddedFee()}
       {@render feeFlowCards('shop', 'Shop', 'Shop Embedded Fee', shopEmbeddedFeeRate, shopResults)}
+    {/if}
     {/if}
 
     
